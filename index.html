@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام إدارة الغيابات المدرسية</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script>tailwind.config={theme:{extend:{fontFamily:{cairo:['Cairo','sans-serif']}}}}</script>
+    <style>
+        :root{--bg:#F5F4EF;--card:#FFFFFF;--text:#16192C;--muted:#7C8298;--border:#E2E4EB;--primary:#059669;--primary-l:#10B981;--primary-d:#047857;--accent:#D97706;--danger:#DC2626}
+        *{font-family:'Cairo',sans-serif;box-sizing:border-box}
+        body{background:var(--bg);color:var(--text);margin:0;min-height:100vh;overflow-x:hidden}
+        body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 15% 10%,rgba(5,150,105,.06) 0%,transparent 55%),radial-gradient(ellipse at 85% 85%,rgba(217,119,6,.04) 0%,transparent 50%);pointer-events:none;z-index:0}
+        ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#c4c8d4;border-radius:8px}
+
+        @keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes slideInR{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+        @keyframes toastIn{from{opacity:0;transform:translateX(100%)}to{opacity:1;transform:translateX(0)}}
+        @keyframes toastOut{from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(100%)}}
+        @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+        @keyframes badgePulse{0%,100%{box-shadow:0 0 0 0 rgba(5,150,105,.3)}50%{box-shadow:0 0 0 8px rgba(5,150,105,0)}}
+        @keyframes connectorPulse{0%,100%{opacity:.4}50%{opacity:.8}}
+        @keyframes modalIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+
+        .fade-up{animation:fadeUp .5s ease both}.slide-in-r{animation:slideInR .4s ease both}.float-anim{animation:float 3s ease-in-out infinite}
+        .card{background:var(--card);border-radius:16px;border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,.04)}
+        .card-hover{transition:all .25s ease}.card-hover:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,.08)}
+        .upload-zone{border:2.5px dashed #c4c8d4;border-radius:20px;transition:all .3s;position:relative;overflow:hidden}
+        .upload-zone::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(5,150,105,.03),rgba(217,119,6,.02));opacity:0;transition:opacity .3s}
+        .upload-zone:hover,.upload-zone.drag-over{border-color:var(--primary);background:rgba(5,150,105,.03)}
+        .upload-zone:hover::before,.upload-zone.drag-over::before{opacity:1}
+        .upload-zone.drag-over{transform:scale(1.01);box-shadow:0 0 0 4px rgba(5,150,105,.1)}
+        .abs-table{border-collapse:separate;border-spacing:0;width:100%}
+        .abs-table thead th{position:sticky;top:0;z-index:10;background:#f8f9fb;font-weight:600;font-size:.8rem;padding:10px 8px;white-space:nowrap;border-bottom:2px solid var(--border);color:var(--muted)}
+        .abs-table tbody tr{transition:background .15s}.abs-table tbody tr:hover{background:rgba(5,150,105,.04)}
+        .abs-table tbody td{padding:8px;border-bottom:1px solid #f0f1f4;font-size:.82rem;text-align:center;white-space:nowrap}
+        .abs-table .sticky-col{position:sticky;z-index:5;background:var(--card)}
+        .day-cell{width:36px;min-width:36px;height:34px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:600;transition:transform .15s}
+        .day-cell:hover{transform:scale(1.15)}
+        .day-none{background:#f3f4f6;color:#c0c4cc}.day-present{background:#ecfdf5;color:#059669}
+        .day-absent{background:#fef2f2;color:#dc2626;box-shadow:inset 0 0 0 1.5px rgba(220,38,38,.15)}
+        .day-absent-high{background:#dc2626;color:#fff;box-shadow:0 2px 8px rgba(220,38,38,.25)}
+        .day-special{background:#fffbeb;color:#d97706;box-shadow:inset 0 0 0 1.5px rgba(217,119,6,.2)}
+        .detail-panel{position:fixed;top:0;right:-480px;width:460px;max-width:92vw;height:100vh;background:var(--card);box-shadow:-8px 0 40px rgba(0,0,0,.12);z-index:50;transition:right .4s cubic-bezier(.22,1,.36,1);overflow-y:auto}
+        .detail-panel.open{right:0}
+        .panel-overlay{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:45;opacity:0;pointer-events:none;transition:opacity .3s}
+        .panel-overlay.open{opacity:1;pointer-events:auto}
+        .toast{animation:toastIn .4s ease both;border-radius:12px;padding:14px 20px;display:flex;align-items:center;gap:10px;font-size:.88rem;box-shadow:0 8px 30px rgba(0,0,0,.12);max-width:380px}
+        .toast.removing{animation:toastOut .35s ease both}
+        .toast-success{background:#065f46;color:#ecfdf5}.toast-error{background:#991b1b;color:#fef2f2}.toast-info{background:#1e3a5f;color:#dbeafe}
+        .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:10px;font-weight:600;font-size:.88rem;border:none;cursor:pointer;transition:all .2s;font-family:inherit}
+        .btn:active{transform:scale(.97)}
+        .btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-d);box-shadow:0 4px 16px rgba(5,150,105,.3)}
+        .btn-outline{background:transparent;color:var(--primary);border:1.5px solid var(--primary)}.btn-outline:hover{background:rgba(5,150,105,.06)}
+        .btn-ghost{background:transparent;color:var(--muted);padding:8px 12px}.btn-ghost:hover{background:#f3f4f6;color:var(--text)}
+        .btn-ghost.active{background:rgba(5,150,105,.1);color:var(--primary)}
+        .class-tab{position:relative;padding:12px 22px 12px 16px;border-radius:14px 14px 0 0;font-size:.92rem;font-weight:700;cursor:pointer;transition:all .25s;border:1.5px solid transparent;border-bottom:none;color:var(--muted);background:transparent;font-family:inherit;display:flex;align-items:center;gap:10px}
+        .class-tab:hover{background:rgba(5,150,105,.04);color:var(--text)}
+        .class-tab.active{background:var(--card);color:var(--primary);border-color:var(--border);box-shadow:0 -3px 12px rgba(0,0,0,.04)}
+        .class-tab .month-count{font-size:.65rem;font-weight:600;padding:2px 8px;border-radius:20px;background:#f3f4f6;color:var(--muted);transition:all .2s}
+        .class-tab.active .month-count{background:rgba(5,150,105,.1);color:var(--primary)}
+        .month-tab{padding:7px 18px;border-radius:10px;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .2s;border:1.5px solid transparent;color:var(--muted);background:transparent;font-family:inherit}
+        .month-tab:hover{background:#f3f4f6;color:var(--text)}
+        .month-tab.active{background:var(--primary);color:#fff;border-color:var(--primary);box-shadow:0 2px 10px rgba(5,150,105,.25)}
+        .search-input{background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:10px 16px 10px 42px;font-size:.9rem;width:100%;transition:all .2s;font-family:inherit;color:var(--text)}
+        .search-input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(5,150,105,.1)}
+        .search-input::placeholder{color:#b0b5c3}
+        .class-badge{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#059669,#047857);color:#fff;padding:8px 22px;border-radius:14px;font-weight:800;font-size:1rem;box-shadow:0 4px 16px rgba(5,150,105,.25);animation:badgePulse 2.5s ease infinite}
+        .chart-container{position:relative;width:100%;max-height:340px}.chart-container canvas{max-height:340px}
+        .tabs-connector{height:3px;background:linear-gradient(90deg,var(--primary) 0%,var(--primary) 30%,var(--border) 30%);border-radius:0 0 2px 2px;animation:connectorPulse 3s ease infinite}
+
+        /* ===== نافذة ورقة الغياب ===== */
+        .sheet-modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:70;display:flex;align-items:center;justify-content:center;padding:12px;opacity:0;pointer-events:none;transition:opacity .3s}
+        .sheet-modal.open{opacity:1;pointer-events:auto}
+        .sheet-modal-inner{width:100%;max-width:680px;max-height:94vh;background:var(--bg);border-radius:20px;overflow:hidden;box-shadow:0 25px 60px rgba(0,0,0,.25);animation:modalIn .35s ease both;display:flex;flex-direction:column}
+        .sheet-modal-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0}
+        .sheet-modal-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;align-items:center;gap:0}
+        .sheet-modal-footer{padding:10px 20px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:10px;flex-shrink:0;background:var(--card)}
+
+        /* ===== فاصل بين أوراق الأشهر في المعاينة ===== */
+        .sheet-page-break{
+            width:100%;height:32px;position:relative;
+            display:flex;align-items:center;justify-content:center;
+            margin:4px 0;flex-shrink:0;
+        }
+        .sheet-page-break::before{
+            content:'';position:absolute;left:10%;right:10%;top:50%;
+            border-top:1.5px dashed #c4c8d4;
+        }
+        .sheet-page-break span{
+            position:relative;z-index:1;background:var(--bg);
+            padding:2px 14px;border-radius:20px;
+            font-size:.7rem;font-weight:700;color:#a0a5b5;
+            border:1px solid #e2e4eb;
+        }
+
+        /* ===== ورقة الغياب — مطابقة A4 عمودي بالضبط ===== */
+        .absence-sheet{
+            background:#fff;
+            width:190mm;
+            height:277mm;
+            padding:6mm 7mm;
+            font-size:7.5pt;
+            color:#111;
+            line-height:1.35;
+            box-shadow:0 2px 20px rgba(0,0,0,.1);
+            display:flex;
+            flex-direction:column;
+            overflow:hidden;
+            flex-shrink:0;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+        .absence-sheet * {
+            font-family: Arial, Helvetica, sans-serif !important;
+        }
+        .absence-sheet .sheet-hdr{text-align:center;padding:2px 0 3px;border:1.5px solid #111;line-height:1.4}
+        .absence-sheet .sheet-hdr h2{font-size:9pt;font-weight:900;margin:0;letter-spacing:.3px;font-family:Arial,sans-serif}
+        .absence-sheet .sheet-hdr h3{font-size:7.5pt;font-weight:600;margin:0;color:#222;font-family:Arial,sans-serif}
+        .absence-sheet .info-grid{display:grid;grid-template-columns:repeat(3,1fr);border:1.5px solid #111;border-top:none}
+        .absence-sheet .info-cell{padding:2.5px 5px;border:1px solid #111;font-size:7pt;display:flex;align-items:center;gap:3px}
+        .absence-sheet .info-cell .lbl{font-weight:800;white-space:nowrap}
+        .absence-sheet .info-cell .val{flex:1;text-align:right}
+        .absence-sheet .sheet-tbl{width:100%;border-collapse:collapse;table-layout:fixed}
+        .absence-sheet .sheet-tbl th,.absence-sheet .sheet-tbl td{border:.8px solid #111;padding:1.5px 1px;text-align:center;font-size:6.5pt;vertical-align:middle;overflow:hidden}
+        .absence-sheet .sheet-tbl th{background:#e2e2e2;font-weight:800;font-size:5.8pt;line-height:1.2;padding:2px 1px}
+        .absence-sheet .sheet-tbl .col-rank{width:4.5mm}
+        .absence-sheet .sheet-tbl .col-id{width:13mm}
+        .absence-sheet .sheet-tbl .col-fam{width:12mm}
+        .absence-sheet .sheet-tbl .col-name{width:15mm}
+        .absence-sheet .sheet-tbl .col-month{width:18mm}
+        .absence-sheet .sheet-tbl .col-day{width:3.6mm}
+        .absence-sheet .sheet-tbl .col-sum{width:5.5mm;background:#f0f0f0;font-weight:800}
+        .absence-sheet .sheet-tbl .col-s1{width:5.2mm;background:#fde8e8}
+        .absence-sheet .sheet-tbl .col-s2{width:5.2mm;background:#e0f5ec}
+        .absence-sheet .sheet-tbl .col-s3{width:5.2mm;background:#fde8e8}
+        .absence-sheet .sheet-tbl .col-s4{width:5.2mm;background:#e0f5ec}
+        .absence-sheet .sheet-tbl .sub-row th{font-size:5pt;padding:1px .5px;background:#ebebeb}
+        .absence-sheet .sheet-tbl .abs-v{color:#dc2626;font-weight:800}
+        .absence-sheet .sheet-tbl .zero-v{color:#059669}
+        .absence-sheet .sheet-tbl .spec-v{color:#d97706;font-weight:700}
+        .absence-sheet .sheet-tbl .off-day{background:#f7f7f7;color:#ccc}
+        .absence-sheet .ft-section{border:1.5px solid #111;border-top:none;margin-top:auto;flex-shrink:0}
+        .absence-sheet .ft-row{display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:.8px solid #111}
+        .absence-sheet .ft-row:last-child{border-bottom:none}
+        .absence-sheet .ft-cell{padding:3px 6px;font-size:6.5pt;min-height:22px;display:flex;flex-direction:column;gap:2px}
+        .absence-sheet .ft-cell:not(:last-child){border-left:.8px solid #111}
+        .absence-sheet .ft-cell .fl{font-weight:800;font-size:6.5pt}
+        .absence-sheet .ft-cell .fl-line{flex:1;border-bottom:.8px dotted #999;min-height:14px}
+
+        /* ===== جدول ملخص الأشهر (اختياري في الورقة) ===== */
+        .absence-sheet .month-summary-tbl{width:100%;border-collapse:collapse;margin-top:2px}
+        .absence-sheet .month-summary-tbl th,.absence-sheet .month-summary-tbl td{border:.8px solid #111;padding:2px 4px;text-align:center;font-size:6pt}
+        .absence-sheet .month-summary-tbl th{background:#e8e8e8;font-weight:800}
+        .absence-sheet .month-summary-tbl .ms-total{font-weight:900;color:#dc2626;background:#fef2f2}
+        .absence-sheet .month-summary-tbl .ms-zero{color:#059669}
+
+        .markdown-body { font-family: 'Cairo', sans-serif; direction: rtl; text-align: right; }
+        .markdown-body h1, .markdown-body h2, .markdown-body h3 { font-weight: 800; margin-top: 1.5em; margin-bottom: 0.5em; color: #111; }
+        .markdown-body h1 { font-size: 1.5rem; }
+        .markdown-body h2 { font-size: 1.3rem; }
+        .markdown-body h3 { font-size: 1.1rem; }
+        .markdown-body p { margin-bottom: 1em; }
+        .markdown-body ul, .markdown-body ol { margin-bottom: 1em; padding-right: 20px; list-style-position: outside; }
+        .markdown-body ul { list-style-type: disc; }
+        .markdown-body ol { list-style-type: decimal; }
+        .markdown-body li { margin-bottom: 0.25em; }
+        .markdown-body strong { font-weight: 700; color: #000; }
+
+        @media print{
+            body *{visibility:hidden!important}
+            #sheet-print-area,#sheet-print-area *{visibility:visible!important}
+            #sheet-print-area{position:fixed;inset:0;background:#fff;z-index:99999;padding:0;margin:0}
+            #sheet-print-area .absence-sheet{box-shadow:none;width:100%;height:100vh;margin:0;padding:6mm 7mm;page-break-after:always}
+            #sheet-print-area .absence-sheet:last-child{page-break-after:auto}
+            #sheet-print-area .sheet-page-break{display:none!important}
+            .no-print{display:none!important}
+        }
+        @media(max-width:768px){
+            .detail-panel{width:100%;right:-100%}
+            .stats-grid{grid-template-columns:repeat(2,1fr)!important}
+            .charts-grid{grid-template-columns:1fr!important}
+            .class-tab{padding:10px 14px 10px 12px;font-size:.82rem}
+            .class-tab .month-count{display:none}
+            .sheet-modal-inner{max-width:100%}
+            .sheet-modal-body{padding:4px}
+            .absence-sheet{width:100%;height:auto;padding:3mm 3mm;font-size:6pt}
+            .absence-sheet .sheet-tbl .col-day{width:2.8mm}
+            .absence-sheet .sheet-tbl th,.absence-sheet .sheet-tbl td{font-size:5.5pt;padding:1px .5px}
+        }
+        @media(max-width:480px){.stats-grid{grid-template-columns:1fr!important}}
+        @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+    </style>
+</head>
+<body>
+    <div id="toast-container" class="fixed top-5 left-5 z-[60] flex flex-col gap-3" aria-live="polite"></div>
+    <div id="panel-overlay" class="panel-overlay" onclick="closeDetailPanel()"></div>
+    <aside id="detail-panel" class="detail-panel" role="dialog" aria-label="تفاصيل التلميذ"><div id="panel-content" class="p-6"></div></aside>
+
+    <div id="sheet-modal" class="sheet-modal" onclick="if(event.target===this)closeSheetModal()">
+        <div class="sheet-modal-inner">
+            <div class="sheet-modal-header no-print">
+                <div class="flex items-center gap-3 flex-1">
+                    <div class="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center"><i class="fa-solid fa-file-lines text-emerald-700"></i></div>
+                    <div><h3 class="font-bold text-sm text-gray-800">ورقة الغياب الفردية</h3><p class="text-xs text-gray-400" id="sheet-modal-subtitle">—</p></div>
+                </div>
+                <div class="flex items-center gap-2 no-print">
+                    <span id="sheet-months-count" class="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full" style="display:none"></span>
+                    <button onclick="closeSheetModal()" class="btn-ghost rounded-xl w-9 h-9 flex items-center justify-center"><i class="fa-solid fa-xmark text-gray-400"></i></button>
+                </div>
+            </div>
+            <div class="sheet-modal-body"><div id="sheet-preview"></div></div>
+            <div class="sheet-modal-footer no-print">
+                <button onclick="printAbsenceSheet()" class="btn btn-primary text-sm"><i class="fa-solid fa-print"></i> طباعة</button>
+                <button onclick="exportSheetPDF()" class="btn btn-outline text-sm"><i class="fa-solid fa-file-pdf"></i> PDF</button>
+                <button onclick="closeSheetModal()" class="btn btn-ghost text-sm"><i class="fa-solid fa-xmark"></i> إغلاق</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="ai-modal" class="sheet-modal" onclick="if(event.target===this)closeAiModal()">
+        <div class="sheet-modal-inner" style="max-width: 800px;">
+            <div class="sheet-modal-header no-print">
+                <div class="flex items-center gap-3 flex-1">
+                    <div class="w-9 h-9 rounded-xl bg-purple-100 flex items-center justify-center"><i class="fa-solid fa-wand-magic-sparkles text-purple-700"></i></div>
+                    <div><h3 class="font-bold text-sm text-gray-800" id="ai-modal-title">الذكاء الاصطناعي</h3><p class="text-xs text-gray-400" id="ai-modal-subtitle">—</p></div>
+                </div>
+                <div class="flex items-center gap-2 no-print">
+                    <button onclick="closeAiModal()" class="btn-ghost rounded-xl w-9 h-9 flex items-center justify-center"><i class="fa-solid fa-xmark text-gray-400"></i></button>
+                </div>
+            </div>
+            <div class="sheet-modal-body" style="align-items: stretch; padding: 24px;">
+                <div id="ai-loading" class="flex flex-col items-center justify-center py-12" style="display:none">
+                    <i class="fa-solid fa-circle-notch fa-spin text-4xl text-purple-600 mb-4"></i>
+                    <p class="text-gray-600 font-semibold">جاري تحليل البيانات وإعداد التقرير...</p>
+                </div>
+                <div id="ai-content" class="markdown-body" style="font-size: 14px; line-height: 1.8; color: #333;"></div>
+            </div>
+            <div class="sheet-modal-footer no-print">
+                <button onclick="printAiReport()" class="btn btn-primary text-sm"><i class="fa-solid fa-print"></i> طباعة</button>
+                <button onclick="closeAiModal()" class="btn btn-ghost text-sm"><i class="fa-solid fa-xmark"></i> إغلاق</button>
+            </div>
+        </div>
+    </div>
+
+    <header class="relative z-10 bg-gradient-to-l from-emerald-800 via-emerald-700 to-emerald-900 text-white">
+        <div class="absolute inset-0 opacity-10" style="background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2260%22><circle cx=%2230%22 cy=%2230%22 r=%221%22 fill=%22white%22/></svg>');background-size:60px 60px"></div>
+        <div class="relative max-w-7xl mx-auto px-4 sm:px-6 py-5 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="w-11 h-11 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center text-xl"><i class="fa-solid fa-clipboard-check"></i></div>
+                <div><h1 class="text-lg sm:text-xl font-extrabold tracking-tight">نظام إدارة الغيابات المدرسية</h1><p class="text-emerald-200 text-xs sm:text-sm font-light">تحليل وتتبع غيابات التلاميذ بكل سهولة</p></div>
+            </div>
+            <div class="flex items-center gap-2 no-print">
+                <div id="auth-container" class="flex items-center gap-2">
+                    <button id="btn-login" class="btn bg-white/10 hover:bg-white/20 text-white text-sm backdrop-blur"><i class="fa-brands fa-google"></i> تسجيل الدخول</button>
+                    <div id="user-info" style="display:none" class="flex items-center gap-2">
+                        <img id="user-avatar" src="" alt="User" class="w-8 h-8 rounded-full border border-white/20">
+                        <span id="user-name" class="text-sm font-medium hidden sm:inline"></span>
+                        <button id="btn-logout" class="btn-ghost text-white hover:bg-white/10 rounded-lg p-1.5" title="تسجيل الخروج"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
+                    </div>
+                </div>
+                <button onclick="printReport()" class="btn bg-white/10 hover:bg-white/20 text-white text-sm backdrop-blur" id="btn-print" style="display:none"><i class="fa-solid fa-print"></i><span class="hidden sm:inline">طباعة</span></button>
+                <button onclick="exportPDF()" class="btn bg-white/10 hover:bg-white/20 text-white text-sm backdrop-blur" id="btn-pdf" style="display:none"><i class="fa-solid fa-file-pdf"></i><span class="hidden sm:inline">PDF</span></button>
+            </div>
+        </div>
+    </header>
+
+    <main class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-8">
+        <div id="auth-warning" class="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 mb-6 flex items-center gap-3 fade-up">
+            <i class="fa-solid fa-triangle-exclamation text-amber-500 text-xl"></i>
+            <div>
+                <p class="font-bold text-sm">يرجى تسجيل الدخول</p>
+                <p class="text-xs mt-0.5">يجب تسجيل الدخول بحساب Google لحفظ البيانات واسترجاعها من قاعدة البيانات.</p>
+            </div>
+        </div>
+
+        <section id="upload-section" class="fade-up">
+            <div class="text-center mb-8"><h2 class="text-2xl sm:text-3xl font-extrabold text-gray-800 mb-2">استيراد بيانات الغيابات</h2><p class="text-sm text-gray-500">اسحب ملفات Excel هنا — يدعم أقسام وأشهر متعددة</p></div>
+            <div id="upload-zone" class="upload-zone max-w-2xl mx-auto p-10 sm:p-14 text-center cursor-pointer" onclick="document.getElementById('file-input').click()" role="button" tabindex="0" aria-label="رفع ملف" onkeydown="if(event.key==='Enter')this.click()">
+                <div class="float-anim mb-5"><div class="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-emerald-100 to-emerald-50 flex items-center justify-center"><i class="fa-solid fa-file-excel text-3xl text-emerald-600"></i></div></div>
+                <p class="text-base font-bold text-gray-700 mb-1">اسحب ملف Excel وأفلته هنا</p><p class="text-sm text-gray-400 mb-5">أو انقر لاختيار ملف من جهازك</p>
+                <span class="inline-block px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition">اختيار ملف</span>
+                <p class="text-xs text-gray-400 mt-4"><i class="fa-solid fa-shield-halved ml-1"></i> الحد الأقصى 5 ميغابايت — .xlsx</p>
+            </div>
+            <input type="file" id="file-input" accept=".xlsx,.xls" class="hidden" multiple>
+        </section>
+
+        <section id="data-section" style="display:none">
+            <div id="class-info-bar" class="card p-4 mb-4 fade-up no-print"><div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-3"><div class="flex flex-wrap items-center gap-x-6 gap-y-2"><div class="class-badge"><i class="fa-solid fa-users-rectangle"></i><span id="class-name-display">—</span></div><div class="flex items-center gap-4 text-sm text-gray-500 flex-wrap"><span id="bar-institution" class="flex items-center gap-1.5"><i class="fa-solid fa-building-columns text-emerald-600 text-xs"></i><span></span></span><span id="bar-level" class="flex items-center gap-1.5"><i class="fa-solid fa-graduation-cap text-emerald-600 text-xs"></i><span></span></span><span id="bar-year" class="flex items-center gap-1.5"><i class="fa-solid fa-calendar text-emerald-600 text-xs"></i><span></span></span><span id="bar-students" class="flex items-center gap-1.5"><i class="fa-solid fa-user-group text-emerald-600 text-xs"></i><span></span></span></div></div><div class="flex flex-wrap gap-2"><button onclick="generateClassInvestment()" class="btn btn-outline text-xs py-1.5 px-3 text-purple-700 border-purple-200 hover:bg-purple-50"><i class="fa-solid fa-chart-line"></i> استثمار الغيابات</button><button onclick="generateAbsenceReport()" class="btn btn-outline text-xs py-1.5 px-3 text-indigo-700 border-indigo-200 hover:bg-indigo-50"><i class="fa-solid fa-file-contract"></i> تقرير مفصل وسبل العلاج</button><button onclick="printClassAbsenceSummary()" class="btn btn-outline text-xs py-1.5 px-3"><i class="fa-solid fa-table-list"></i> طباعة اللائحة الإجمالية</button><button onclick="exportClassAbsenceListExcel()" class="btn btn-outline text-xs py-1.5 px-3 text-emerald-700 border-emerald-200 hover:bg-emerald-50"><i class="fa-solid fa-file-excel"></i> تحميل Excel</button><button onclick="printAllStudentsAbsenceSheets()" class="btn btn-outline text-xs py-1.5 px-3"><i class="fa-solid fa-print"></i> طباعة الأوراق الفردية</button><button onclick="exportAllStudentsSheetsPDF()" class="btn btn-primary text-xs py-1.5 px-3"><i class="fa-solid fa-file-pdf"></i> تحميل الأوراق PDF</button></div></div></div>
+            <div class="flex items-end gap-1 mb-0 no-print flex-wrap" id="class-tabs-wrapper"><div id="class-tabs" class="flex flex-wrap gap-1"></div><button onclick="document.getElementById('file-input').click()" class="btn btn-outline text-xs py-2 px-3 mb-0.5 rounded-t-xl"><i class="fa-solid fa-plus"></i> إضافة ملف</button><button onclick="clearAllData()" class="btn btn-ghost text-xs py-2 px-3 text-red-500 hover:text-red-700 hover:bg-red-50 mb-0.5 rounded-t-xl mr-auto"><i class="fa-solid fa-trash-can"></i></button></div>
+            <div class="tabs-connector no-print" id="tabs-connector" style="display:none"></div>
+            <div class="bg-white border border-t-0 border-gray-200 rounded-b-2xl rounded-tr-2xl px-4 pt-3 pb-0 mb-5 no-print" id="month-tabs-container" style="display:none"><div class="flex items-center gap-2 mb-3"><i class="fa-regular fa-calendar text-emerald-600 text-sm"></i><span class="text-xs font-semibold text-gray-400">الأشهر المتوفرة:</span></div><div id="month-tabs" class="flex flex-wrap gap-2 pb-3"></div></div>
+            <div id="stats-cards" class="stats-grid grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6"></div>
+            <div id="charts-section" class="charts-grid grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+                <div class="card p-5 fade-up"><div class="flex items-center justify-between mb-4"><h3 class="text-sm font-bold text-gray-700"><i class="fa-solid fa-chart-column text-emerald-600 ml-2"></i>غيابات التلاميذ — <span id="chart-month-label1">—</span></h3><div class="flex gap-1"><button onclick="setBarChartMode('total')" class="btn-ghost active text-xs rounded-lg" id="bar-mode-total">المجموع</button><button onclick="setBarChartMode('unjustified')" class="btn-ghost text-xs rounded-lg" id="bar-mode-unjustified">غير مبرر</button></div></div><div class="chart-container"><canvas id="barChart"></canvas></div></div>
+                <div class="card p-5 fade-up" style="animation-delay:100ms"><div class="flex items-center justify-between mb-4"><h3 class="text-sm font-bold text-gray-700"><i class="fa-solid fa-chart-line text-amber-600 ml-2"></i>تطور الغياب خلال أشهر السنة</h3><select id="line-chart-student" onchange="updateLineChart()" class="text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-semibold bg-white text-gray-700 focus:outline-none focus:border-emerald-400" aria-label="اختيار تلميذ"><option value="all">جميع التلاميذ</option></select></div><div class="chart-container"><canvas id="lineChart"></canvas></div></div>
+            </div>
+            <div id="pie-section" class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6" style="display:none">
+                <div class="card p-5 fade-up"><h3 class="text-sm font-bold text-gray-700 mb-4"><i class="fa-solid fa-chart-pie text-red-500 ml-2"></i>توزيع الغيابات — <span id="chart-month-label3">—</span></h3><div class="chart-container" style="max-height:260px"><canvas id="pieChart"></canvas></div></div>
+                <div class="card p-5 fade-up" style="animation-delay:80ms"><h3 class="text-sm font-bold text-gray-700 mb-4"><i class="fa-solid fa-ranking-star text-purple-500 ml-2"></i>ترتيب التلاميذ — <span id="chart-month-label4">—</span></h3><div class="chart-container" style="max-height:260px"><canvas id="hBarChart"></canvas></div></div>
+            </div>
+            <div class="card p-4 mb-5 flex flex-wrap items-center gap-3 no-print fade-up">
+                <div class="relative flex-1 min-w-[200px]"><i class="fa-solid fa-magnifying-glass absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i><input type="text" id="search-input" class="search-input" placeholder="بحث بالاسم أو الرقم الوطني..." oninput="handleSearch(this.value)" aria-label="بحث"></div>
+                <div class="flex gap-1 bg-gray-100 rounded-xl p-1"><button onclick="setViewMode('compact')" class="btn-ghost active text-sm rounded-lg" id="view-compact"><i class="fa-solid fa-list"></i> مختصر</button><button onclick="setViewMode('detailed')" class="btn-ghost text-sm rounded-lg" id="view-detailed"><i class="fa-solid fa-table-cells"></i> تفصيلي</button></div>
+                <div class="flex gap-1 bg-gray-100 rounded-xl p-1"><button onclick="setSortMode('rank')" class="btn-ghost active text-sm rounded-lg" id="sort-rank">ترتيب</button><button onclick="setSortMode('absent')" class="btn-ghost text-sm rounded-lg" id="sort-absent">غياب</button></div>
+            </div>
+            <div class="card overflow-hidden mb-6 fade-up" id="table-card"><div class="overflow-x-auto" style="max-height:60vh;overflow-y:auto" id="table-scroll"><table class="abs-table" id="absence-table"><thead id="table-head"></thead><tbody id="table-body"></tbody></table></div><div id="table-footer" class="px-4 py-3 border-t border-gray-100 text-sm text-gray-500 flex items-center justify-between"></div></div>
+            <div id="no-results" class="text-center py-16" style="display:none"><i class="fa-solid fa-face-meh text-5xl text-gray-300 mb-4"></i><p class="text-gray-500 font-semibold">لا توجد نتائج مطابقة</p></div>
+        </section>
+    </main>
+    <div id="print-area" style="display:none"></div>
+    <div id="sheet-print-area" style="display:none"></div>
+
+    <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>
+

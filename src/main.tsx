@@ -1,0 +1,965 @@
+import './index.css';
+import { auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, collection, doc, setDoc, getDocs, deleteDoc } from './firebase';
+import { GoogleGenAI } from '@google/genai';
+import { marked } from 'marked';
+
+// Expose global variables and functions for inline HTML event handlers
+const MAX_FILE_SIZE=5*1024*1024;
+const MONTH_NAMES={'janvier':'يناير','février':'فبراير','mars':'مارس','avril':'أبريل','mai':'ماي','juin':'يونيو','juillet':'يوليوز','août':'غشت','septembre':'شتنبر','octobre':'أكتوبر','novembre':'نونبر','décembre':'دجنبر','يناير':'يناير','فبراير':'فبراير','مارس':'مارس','أبريل':'أبريل','ماي':'ماي','يونيو':'يونيو','يوليوز':'يوليوز','غشت':'غشت','شتنبر':'شتنبر','أكتوبر':'أكتوبر','نونبر':'نونبر','دجنبر':'دجنبر','january':'يناير','february':'فبراير','march':'مارس','april':'أبريل','may':'ماي','june':'يونيو','july':'يوليوز','august':'غشت','september':'شتنبر','october':'أكتوبر','november':'نونبر','december':'دجنبر'};
+const MONTH_ORDER=['يناير','فبراير','مارس','أبريل','ماي','يونيو','يوليوز','غشت','شتنبر','أكتوبر','نونبر','دجنبر'];
+const CHART_COLORS=['#059669','#D97706','#DC2626','#7C3AED','#2563EB','#0891B2','#C026D3','#EA580C','#65A30D','#0D9488','#9333EA','#E11D48','#CA8A04','#0369A1','#BE185D','#4F46E5','#15803D','#B45309'];
+
+const state: any = {datasets:[],activeClass:null,activeMonth:null,searchQuery:'',viewMode:'compact',sortMode:'rank',barChartMode:'total'};
+let barChart: any = null, lineChart: any = null, pieChart: any = null, hBarChart: any = null, currentSheetStudentId: any = null;
+let currentUser: any = null;
+
+function normCell(v: any){if(v===null||v===undefined||v==='')return'*';const s=String(v).trim();return(s==='*'||s===''||s.toLowerCase()==='null')?'*':s}
+function parseDayValue(v: any){const s=normCell(v);if(s==='*')return{type:'none',val:0};if(s==='0')return{type:'present',val:0};if(s.toUpperCase()==='X')return{type:'special',val:0};const n=parseFloat(s);return(!isNaN(n)&&n>0)?{type:'absent',val:n}:{type:'present',val:0}}
+function translateMonth(m: any){return(!m)?'غير محدد':(MONTH_NAMES[m.toLowerCase().trim() as keyof typeof MONTH_NAMES]||m)}
+function getSchoolDays(students: any[]){const d=new Set();students.forEach(st=>{for(let i=1;i<=31;i++){if(st.days[i]!==undefined&&parseDayValue(st.days[i]).type!=='none')d.add(i)}});return d}
+function calcTotalAbsences(st: any){let t=0;for(let d=1;d<=31;d++){const i=parseDayValue(st.days[d]);if(i.type==='absent')t+=i.val}return t}
+function calcAbsentDays(st: any){let c=0;for(let d=1;d<=31;d++){if(parseDayValue(st.days[d]).type==='absent')c++}return c}
+function getUnjustified(st: any){return parseInt(st.summaries[0])||0}
+function getJustified(st: any){return parseInt(st.summaries[1])||0}
+function studentFullName(st: any){return`${st.family} ${st.name}`}
+function getClassKey(ds: any){return ds.metadata.class||'غير محدد'}
+function extractAfter(text: string,keyword: string){const idx=text.indexOf(keyword);if(idx===-1)return'';let rest=text.substring(idx+keyword.length).replace(/[:\s]+/,' ').trim();['المديرية','نيابة','عمالة','السنة الدراسية','المستوى','القسم','الشهر','غير مبرر','مبرر'].forEach(nk=>{const ni=rest.indexOf(nk);if(ni>0)rest=rest.substring(0,ni).trim()});return rest.replace(/[*\|]/g,'').trim()}
+
+function getUniqueClasses(){const map=new Map();state.datasets.forEach((ds: any)=>{const k=getClassKey(ds);if(!map.has(k))map.set(k,{institution:ds.metadata.institution,level:ds.metadata.level,year:ds.metadata.year,academy:ds.metadata.academy})});return map}
+function getClassMonths(cn: string){return state.datasets.filter((ds: any)=>getClassKey(ds)===cn).sort((a: any,b: any)=>MONTH_ORDER.indexOf(a.metadata.monthAr)-MONTH_ORDER.indexOf(b.metadata.monthAr))}
+function getActiveDataset(){return state.datasets.find((ds: any)=>getClassKey(ds)===state.activeClass&&ds.metadata.month===state.activeMonth)}
+function getActiveClassDatasets(){return state.datasets.filter((ds: any)=>getClassKey(ds)===state.activeClass).sort((a: any,b: any)=>MONTH_ORDER.indexOf(a.metadata.monthAr)-MONTH_ORDER.indexOf(b.metadata.monthAr))}
+
+function getDatasetId(ds: any) {
+    let id = `${ds.metadata.class}_${ds.metadata.month}`.replace(/\//g, '-');
+    if (id === '.' || id === '..') id = `ds_${id}`;
+    if (id.startsWith('__') && id.endsWith('__')) id = `ds_${id}`;
+    return id;
+}
+
+function showToast(msg: string,type='info',dur=3500){const c=document.getElementById('toast-container');if(!c)return;const icons: any={success:'fa-circle-check',error:'fa-circle-xmark',info:'fa-circle-info'};const t=document.createElement('div');t.className=`toast toast-${type}`;t.innerHTML=`<i class="fa-solid ${icons[type]||icons.info}"></i><span>${msg}</span>`;c.appendChild(t);setTimeout(()=>{t.classList.add('removing');setTimeout(()=>t.remove(),400)},dur)}
+
+async function saveDatasetToFirebase(dataset: any) {
+    if (!currentUser) return;
+    try {
+        const datasetId = getDatasetId(dataset);
+        const docRef = doc(db, `users/${currentUser.uid}/datasets`, datasetId);
+        await setDoc(docRef, {
+            userId: currentUser.uid,
+            fileName: dataset.fileName || '',
+            metadata: dataset.metadata,
+            students: dataset.students,
+            summaryCols: dataset.summaryCols || [],
+            createdAt: Date.now()
+        });
+        console.log("Dataset saved to Firebase:", datasetId);
+    } catch (error) {
+        console.error("Error saving dataset:", error);
+        showToast('حدث خطأ أثناء الحفظ في قاعدة البيانات', 'error');
+    }
+}
+
+async function loadDatasetsFromFirebase() {
+    if (!currentUser) return;
+    try {
+        const querySnapshot = await getDocs(collection(db, `users/${currentUser.uid}/datasets`));
+        const datasets: any[] = [];
+        querySnapshot.forEach((doc) => {
+            datasets.push(doc.data());
+        });
+        state.datasets = datasets;
+        
+        if (state.datasets.length > 0) {
+            if (!state.activeClass || !state.datasets.find((d: any)=>getClassKey(d)===state.activeClass)) {
+                state.activeClass = getClassKey(state.datasets[0]);
+            }
+            const cm = getClassMonths(state.activeClass);
+            if (!cm.find((d: any)=>d.metadata.month===state.activeMonth)) {
+                state.activeMonth = cm.length ? cm[0].metadata.month : null;
+            }
+        }
+        renderAll();
+        showToast('تم استرجاع البيانات بنجاح', 'success');
+    } catch (error) {
+        console.error("Error loading datasets:", error);
+        showToast('حدث خطأ أثناء استرجاع البيانات', 'error');
+    }
+}
+
+async function deleteDatasetFromFirebase(datasetId: string) {
+    if (!currentUser) return;
+    try {
+        await deleteDoc(doc(db, `users/${currentUser.uid}/datasets`, datasetId));
+    } catch (error) {
+        console.error("Error deleting dataset:", error);
+    }
+}
+
+function processExcel(buffer: any,fileName: string){
+    try{
+        const wb=(window as any).XLSX.read(buffer,{type:'array'});const sn=wb.SheetNames.includes('Data')?'Data':wb.SheetNames[0];
+        const raw=(window as any).XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:'',blankrows:false});
+        if(raw.length<6){showToast(`"${fileName}" فارغ`,'error');return}
+        const parsed=parseData(raw);if(!parsed||parsed.students.length===0){showToast(`لا بيانات في "${fileName}"`,'error');return}
+        const ck=getClassKey(parsed);const ex=state.datasets.findIndex((d: any)=>getClassKey(d)===ck&&d.metadata.month===parsed.metadata.month);
+        
+        const newDataset = {fileName,...parsed};
+        if(ex!==-1){
+            state.datasets[ex]={...state.datasets[ex], ...newDataset};
+            showToast(`تم تحديث ${parsed.metadata.monthAr} — ${parsed.metadata.class}`,'info')
+        } else {
+            state.datasets.push(newDataset);
+            showToast(`تم استيراد ${parsed.metadata.monthAr} — ${parsed.metadata.class}`,'success')
+        }
+        
+        if(!state.activeClass||!state.datasets.find((d: any)=>getClassKey(d)===state.activeClass))state.activeClass=ck;
+        const cm=getClassMonths(state.activeClass);if(!cm.find((d: any)=>d.metadata.month===state.activeMonth))state.activeMonth=cm.length?cm[0].metadata.month:null;
+        
+        renderAll();
+        
+        if (currentUser) {
+            saveDatasetToFirebase(newDataset);
+        } else {
+            showToast('البيانات محفوظة محلياً فقط. يرجى تسجيل الدخول لحفظها في السحابة.', 'info', 5000);
+        }
+    }catch(err: any){console.error(err);showToast(`خطأ: ${err.message}`,'error')}
+}
+
+function parseData(raw: any[]){
+    let headerIdx=-1,subHeaderIdx=-1;
+    for(let i=0;i<Math.min(12,raw.length);i++){const row=raw[i]||[];if(row.some((c: any)=>String(c).includes('الترتيب')))headerIdx=i;if(row.some((c: any)=>String(c).includes('يوم'))&&row.some((c: any)=>String(c).includes('ساعة')))subHeaderIdx=i}
+    if(headerIdx===-1)return null;
+    const headers=raw[headerIdx]||[];const colMap: any={dayCols:{}};
+    headers.forEach((h: any,i: number)=>{const s=String(h).trim();if(s==='الترتيب')colMap.rank=i;else if(s==='رقم التلميذ')colMap.id=i;else if(s==='النسب بالعربية')colMap.family=i;else if(s==='الإسم بالعربية')colMap.name=i;else if(s==='المجموع')colMap.total=i;else{const n=parseInt(s);if(!isNaN(n)&&n>=1&&n<=31)colMap.dayCols[n]=i}});
+    const meta={month:'',monthAr:'',academy:'',institution:'',level:'',class:'',year:''};
+    for(let i=0;i<headerIdx;i++){
+        const row=raw[i]||[];
+        const text=row.join(' ');
+        if(text.includes('أكاديمية'))meta.academy=extractAfter(text,'أكاديمية');
+        if(text.includes('مؤسسة'))meta.institution=extractAfter(text,'مؤسسة');
+        if(text.includes('المستوى'))meta.level=extractAfter(text,'المستوى');
+        if(text.includes('القسم'))meta.class=extractAfter(text,'القسم');
+        if(text.includes('الشهر')){const m=extractAfter(text,'الشهر');meta.month=m.toLowerCase();meta.monthAr=translateMonth(m)}
+        if(text.includes('السنة')){const y=text.match(/\d{4}\s*\/\s*\d{4}/);if(y)meta.year=y[0]}
+    }
+    const summaryCols: any[]=[];
+    if(subHeaderIdx!==-1){const subRow=raw[subHeaderIdx]||[];for(let i=(colMap.total!==undefined?colMap.total:35);i<subRow.length;i++){const v=String(subRow[i]).trim();if(['يوم','ساعة','X','1/2'].includes(v))summaryCols.push({idx:i,label:v})}}
+    const startRow=(subHeaderIdx!==-1?subHeaderIdx:headerIdx)+1;const students=[];
+    for(let i=startRow;i<raw.length;i++){const row=raw[i]||[];const rank=row[colMap.rank],id=row[colMap.id];if(!rank&&!id)continue;const st: any={rank:String(rank).trim(),id:String(id).trim(),family:String(row[colMap.family]||'').trim(),name:String(row[colMap.name]||'').trim(),days:{},totalRaw:row[colMap.total]!==undefined?String(row[colMap.total]).trim():'',summaries:[]};for(let d=1;d<=31;d++){const ci=colMap.dayCols[d];if(ci!==undefined)st.days[d]=normCell(row[ci])}summaryCols.forEach(sc=>st.summaries.push(String(row[sc.idx]||'').trim()));students.push(st)}
+    return{metadata:meta,students,summaryCols};
+}
+
+function renderAll(){
+    const has=state.datasets.length>0;
+    const uploadSection = document.getElementById('upload-section');
+    const dataSection = document.getElementById('data-section');
+    const btnPrint = document.getElementById('btn-print');
+    const btnPdf = document.getElementById('btn-pdf');
+    
+    if(uploadSection) uploadSection.style.display=has?'none':'';
+    if(dataSection) dataSection.style.display=has?'':'none';
+    if(btnPrint) btnPrint.style.display=has?'':'none';
+    if(btnPdf) btnPdf.style.display=has?'':'none';
+    
+    if(!has)return;
+    renderClassTabs();renderMonthTabs();renderClassInfo();renderStats();renderCharts();renderTable();
+}
+
+function renderClassTabs(){const classes=getUniqueClasses();const c=document.getElementById('class-tabs');if(!c)return;c.innerHTML='';classes.forEach((info,cn)=>{const months=getClassMonths(cn);const btn=document.createElement('button');btn.className=`class-tab ${cn===state.activeClass?'active':''}`;btn.innerHTML=`<i class="fa-solid fa-users-rectangle text-sm ${cn===state.activeClass?'text-emerald-600':'text-gray-400'}"></i><span>${cn}</span><span class="month-count">${months.length} ${months.length===1?'شهر':'أشهر'}</span>`;btn.onclick=()=>{state.activeClass=cn;const cm=getClassMonths(cn);if(!cm.find((d: any)=>d.metadata.month===state.activeMonth))state.activeMonth=cm.length?cm[0].metadata.month:null;state.searchQuery='';(document.getElementById('search-input') as HTMLInputElement).value='';renderAll()};c.appendChild(btn)});const tc = document.getElementById('tabs-connector'); if(tc) tc.style.display=classes.size>0?'':'none'}
+function renderMonthTabs(){const c=document.getElementById('month-tabs');const w=document.getElementById('month-tabs-container');if(!w || !c)return;if(!state.activeClass){w.style.display='none';return}const months=getClassMonths(state.activeClass);if(!months.length){w.style.display='none';return}w.style.display='';c.innerHTML='';months.forEach((ds: any)=>{const btn=document.createElement('button');btn.className=`month-tab ${ds.metadata.month===state.activeMonth?'active':''}`;btn.textContent=ds.metadata.monthAr||'—';btn.onclick=()=>{state.activeMonth=ds.metadata.month;state.searchQuery='';(document.getElementById('search-input') as HTMLInputElement).value='';renderAll()};c.appendChild(btn)})}
+function renderClassInfo(){const ds=getActiveDataset();const ci=getUniqueClasses().get(state.activeClass);if(!ds&&!ci)return;const m=ds?ds.metadata:{};
+    const cnd = document.getElementById('class-name-display'); if(cnd) cnd.textContent=state.activeClass;
+    const bi = document.getElementById('bar-institution'); if(bi && bi.querySelector('span')) bi.querySelector('span')!.textContent=ci?.institution||m.institution||'—';
+    const bl = document.getElementById('bar-level'); if(bl && bl.querySelector('span')) bl.querySelector('span')!.textContent=ci?.level||m.level||'—';
+    const by = document.getElementById('bar-year'); if(by && by.querySelector('span')) by.querySelector('span')!.textContent=ci?.year||m.year||'—';
+    const bs = document.getElementById('bar-students'); if(bs && bs.querySelector('span')) bs.querySelector('span')!.textContent=ds?`${ds.students.length} تلميذ`:'—';
+}
+
+function renderStats(){const ds=getActiveDataset();if(!ds)return;const students=ds.students;const sd=getSchoolDays(students);let ta=0;let ma={name:'—',val:0};students.forEach((st: any)=>{const a=calcTotalAbsences(st);ta+=a;if(a>ma.val)ma={name:studentFullName(st),val:a}});const stats=[{icon:'fa-user-group',bg:'bg-emerald-50',ic:'text-emerald-600',nc:'text-emerald-700',label:'عدد التلاميذ',value:students.length},{icon:'fa-clock',bg:'bg-red-50',ic:'text-red-500',nc:'text-red-600',label:'مجموع الغيابات',value:ta},{icon:'fa-triangle-exclamation',bg:'bg-amber-50',ic:'text-amber-600',nc:'text-amber-700',label:'أكثر غياباً',value:ma.name,sub:`${ma.val} غياب`},{icon:'fa-calendar-day',bg:'bg-teal-50',ic:'text-teal-600',nc:'text-teal-700',label:'أيام الدراسة',value:sd.size,sub:'من 31 يوم'}];
+    const sc = document.getElementById('stats-cards');
+    if(sc) sc.innerHTML=stats.map((s,i)=>`<div class="card card-hover p-5 fade-up" style="animation-delay:${i*80}ms"><div class="w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center mb-3"><i class="fa-solid ${s.icon} ${s.ic}"></i></div><p class="text-2xl font-extrabold ${s.nc} mb-0.5">${s.value}</p><p class="text-xs text-gray-400 font-medium">${s.label}</p>${s.sub?`<p class="text-xs text-gray-400 mt-0.5">${s.sub}</p>`:''}</div>`).join('');
+}
+
+function renderCharts(){const ds=getActiveDataset();if(!ds)return;const ml=ds.metadata.monthAr||'—';
+    const ps = document.getElementById('pie-section'); if(ps) ps.style.display=ds.summaryCols.length>0?'':'none';
+    const c1 = document.getElementById('chart-month-label1'); if(c1) c1.textContent=ml;
+    const c3 = document.getElementById('chart-month-label3'); if(c3) c3.textContent=ml;
+    const c4 = document.getElementById('chart-month-label4'); if(c4) c4.textContent=ml;
+    updateBarChart();updateLineChart();updatePieChart();updateHBarChart();updateStudentSelect();
+}
+
+function updateBarChart(){const ds=getActiveDataset();if(!ds)return;const sorted=[...ds.students].sort((a,b)=>{const va=state.barChartMode==='total'?calcTotalAbsences(a):getUnjustified(a);const vb=state.barChartMode==='total'?calcTotalAbsences(b):getUnjustified(b);return vb-va}).filter(st=>(state.barChartMode==='total'?calcTotalAbsences(st):getUnjustified(st))>0);if(barChart)barChart.destroy();
+    const canvas = document.getElementById('barChart') as HTMLCanvasElement;
+    if(!canvas) return;
+    barChart=new (window as any).Chart(canvas,{type:'bar',data:{labels:sorted.map(st=>st.family),datasets:[{label:state.barChartMode==='total'?'المجموع':'غير مبرر',data:sorted.map(st=>state.barChartMode==='total'?calcTotalAbsences(st):getUnjustified(st)),backgroundColor:sorted.map((_,i)=>{const r=i/Math.max(sorted.length-1,1);return r<.5?CHART_COLORS[Math.floor(r*4)]:'#DC2626'}),borderRadius:6,maxBarThickness:32}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{rtl:true,textDirection:'rtl',titleFont:{family:'Cairo'},bodyFont:{family:'Cairo'}}},scales:{x:{ticks:{font:{family:'Cairo',size:10},maxRotation:45,minRotation:30},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{family:'Cairo',size:11},stepSize:1},grid:{color:'#f0f1f4'}}}}})
+}
+
+function updateStudentSelect(){const sel=document.getElementById('line-chart-student') as HTMLSelectElement;if(!sel)return;const cv=sel.value;const ds=getActiveDataset();if(!ds)return;sel.innerHTML='<option value="all">جميع التلاميذ</option>';ds.students.forEach((st: any)=>{const o=document.createElement('option');o.value=st.id;o.textContent=studentFullName(st);sel.appendChild(o)});if(cv&&ds.students.some((st: any)=>st.id===cv))sel.value=cv}
+
+function updateLineChart(){const ds=getActiveDataset();if(!ds)return;const cds=getActiveClassDatasets();const labels=cds.map((d: any)=>d.metadata.monthAr);const sel = document.getElementById('line-chart-student') as HTMLSelectElement; const sv=sel?sel.value:'all';let datasets: any[]=[];if(sv==='all'){datasets=[{label:'مجموع غيابات القسم',data:cds.map((d: any)=>d.students.reduce((s: number,st: any)=>s+calcTotalAbsences(st),0)),borderColor:'#059669',backgroundColor:'rgba(5,150,105,.1)',fill:true,tension:.4,pointRadius:5,pointHoverRadius:8,borderWidth:3}]}else{const tids=[sv,...[...ds.students].sort((a,b)=>calcTotalAbsences(b)-calcTotalAbsences(a)).filter(st=>st.id!==sv).slice(0,3).map(st=>st.id)];tids.forEach((sid,idx)=>{const f=ds.students.find((st: any)=>st.id===sid);if(!f)return;datasets.push({label:studentFullName(f),data:cds.map((d: any)=>{const s=d.students.find((x: any)=>x.id===sid);return s?calcTotalAbsences(s):0}),borderColor:CHART_COLORS[idx%CHART_COLORS.length],backgroundColor:'transparent',tension:.4,pointRadius:4,pointHoverRadius:7,borderWidth:2.5,borderDash:idx===0?[]:[5,3]})})}if(lineChart)lineChart.destroy();
+    const canvas = document.getElementById('lineChart') as HTMLCanvasElement;
+    if(!canvas) return;
+    lineChart=new (window as any).Chart(canvas,{type:'line',data:{labels,datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',rtl:true,labels:{font:{family:'Cairo',size:11},usePointStyle:true,padding:16}},tooltip:{rtl:true,textDirection:'rtl',titleFont:{family:'Cairo'},bodyFont:{family:'Cairo'},mode:'index',intersect:false}},scales:{x:{ticks:{font:{family:'Cairo',size:11}},grid:{color:'#f0f1f4'}},y:{beginAtZero:true,ticks:{font:{family:'Cairo',size:11},stepSize:1},grid:{color:'#f0f1f4'}}},interaction:{mode:'nearest',axis:'x',intersect:false}}})
+}
+
+function updatePieChart(){const ds=getActiveDataset();if(!ds||ds.summaryCols.length===0)return;let tu=0,tj=0;ds.students.forEach((st: any)=>{tu+=getUnjustified(st);tj+=getJustified(st)});if(pieChart)pieChart.destroy();
+    const canvas = document.getElementById('pieChart') as HTMLCanvasElement;
+    if(!canvas) return;
+    pieChart=new (window as any).Chart(canvas,{type:'doughnut',data:{labels:['غياب غير مبرر (أيام)','غياب مبرر (أيام)'],datasets:[{data:[tu,tj],backgroundColor:['#DC2626','#059669'],borderWidth:0,hoverOffset:8}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom',rtl:true,labels:{font:{family:'Cairo',size:12},usePointStyle:true,padding:20}},tooltip:{rtl:true,titleFont:{family:'Cairo'},bodyFont:{family:'Cairo'}}}}})
+}
+
+function updateHBarChart(){const ds=getActiveDataset();if(!ds)return;const sorted=[...ds.students].sort((a,b)=>calcTotalAbsences(b)-calcTotalAbsences(a)).slice(0,10);if(hBarChart)hBarChart.destroy();
+    const canvas = document.getElementById('hBarChart') as HTMLCanvasElement;
+    if(!canvas) return;
+    hBarChart=new (window as any).Chart(canvas,{type:'bar',data:{labels:sorted.map(st=>studentFullName(st)),datasets:[{label:'المجموع',data:sorted.map(st=>calcTotalAbsences(st)),backgroundColor:sorted.map((_,i)=>i===0?'#DC2626':i<3?'#F59E0B':'#059669'),borderRadius:4,maxBarThickness:20}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{rtl:true,titleFont:{family:'Cairo'},bodyFont:{family:'Cairo'}}},scales:{x:{beginAtZero:true,ticks:{font:{family:'Cairo',size:10},stepSize:1},grid:{color:'#f0f1f4'}},y:{ticks:{font:{family:'Cairo',size:10}},grid:{display:false}}}}})
+}
+
+function renderTable(){
+    const ds=getActiveDataset();if(!ds)return;let students=[...ds.students];
+    if(state.searchQuery){const q=state.searchQuery.toLowerCase();students=students.filter(st=>st.family.toLowerCase().includes(q)||st.name.toLowerCase().includes(q)||st.id.toLowerCase().includes(q))}
+    if(state.sortMode==='absent')students.sort((a,b)=>calcTotalAbsences(b)-calcTotalAbsences(a));
+    const nr = document.getElementById('no-results'); if(nr) nr.style.display=students.length===0?'':'none';
+    const tc = document.getElementById('table-card'); if(tc) tc.style.display=students.length===0?'none':'';
+    const sd=getSchoolDays(ds.students);const isD=state.viewMode==='detailed';
+    let h=`<tr><th class="sticky-col right-0 text-right" style="min-width:45px">#</th><th class="sticky-col text-right" style="min-width:110px;right:45px">النسب</th><th class="sticky-col text-right" style="min-width:130px;right:155px">الإسم</th><th style="min-width:70px">المجموع</th>`;
+    if(ds.summaryCols.length>0){['يوم غ.مبرر','يوم مبرر','ساعة غ.مبرر','ساعة مبرر'].forEach((l,i)=>{h+=`<th style="min-width:65px">${ds.summaryCols[i]?l:''}</th>`})}
+    if(isD){for(let d=1;d<=31;d++){h+=`<th style="min-width:38px" class="${sd.has(d)?'':'opacity-40'}">${d}</th>`}}
+    h+=`<th class="no-print" style="min-width:80px"></th></tr>`;
+    const th = document.getElementById('table-head'); if(th) th.innerHTML=h;
+    let b='';
+    students.forEach((st,idx)=>{
+        const ta=calcTotalAbsences(st),ad=calcAbsentDays(st),ha=ta>0;
+        b+=`<tr class="fade-up" style="animation-delay:${Math.min(idx*20,400)}ms"><td class="sticky-col right-0 text-right font-semibold text-gray-500 text-xs" style="background:var(--card)">${st.rank}</td><td class="sticky-col text-right font-bold" style="background:var(--card);right:45px">${st.family}</td><td class="sticky-col text-right" style="background:var(--card);right:155px">${st.name}</td><td><span class="inline-flex items-center justify-center w-9 h-7 rounded-lg text-sm font-bold ${ha?'bg-red-50 text-red-600':'bg-emerald-50 text-emerald-600'}">${st.totalRaw!==''?st.totalRaw:ad}</span></td>`;
+        ds.summaryCols.forEach((_: any,i: number)=>{const v=st.summaries[i]||'0';b+=`<td><span class="${parseInt(v)>0?'text-red-600 font-bold':'text-gray-400'}">${v}</span></td>`});
+        if(isD){for(let d=1;d<=31;d++){const info=parseDayValue(st.days[d]);let cls='day-none';if(info.type==='present')cls='day-present';else if(info.type==='absent')cls=info.val>=2?'day-absent-high':'day-absent';else if(info.type==='special')cls='day-special';const disp=info.type==='none'?'—':(info.type==='present'?'0':(info.type==='special'?'X':info.val));b+=`<td><span class="day-cell ${cls}">${disp}</span></td>`}}
+        b+=`<td class="no-print"><div class="flex items-center justify-center gap-1"><button onclick='openAbsenceSheet(${JSON.stringify(st.id).replace(/'/g,"\\'")})' class="btn-ghost rounded-lg text-amber-600 hover:bg-amber-50" title="ورقة الغياب"><i class="fa-solid fa-file-lines text-xs"></i></button><button onclick='openDetail(${JSON.stringify(st.id).replace(/'/g,"\\'")})' class="btn-ghost rounded-lg text-emerald-600 hover:bg-emerald-50" title="تفاصيل"><i class="fa-solid fa-arrow-left text-xs"></i></button></div></td></tr>`;
+    });
+    const tb = document.getElementById('table-body'); if(tb) tb.innerHTML=b;
+    const tf = document.getElementById('table-footer'); if(tf) tf.innerHTML=`<span>عرض <strong>${students.length}</strong> من أصل <strong>${ds.students.length}</strong> تلميذ</span><span class="text-xs text-gray-400">${isD?'عرض تفصيلي — 31 يوم':'عرض مختصر'}</span>`;
+}
+
+function buildCombinedAbsenceSheet(classDatasets: any[], sid: string, sheetId: string) {
+    const firstDs = classDatasets[0];
+    const m = firstDs.metadata;
+    const firstSt = firstDs.students.find((s: any) => s.id === sid);
+    if (!firstSt) return '';
+
+    const hasS = classDatasets.some(ds => ds.summaryCols && ds.summaryCols.length > 0);
+
+    let s = `<div class="absence-sheet" id="${sheetId}">
+        <div class="sheet-hdr">
+            <h2>المملكة المغربية</h2>
+            <h3>وزارة التربية الوطنية والتعليم الأولي والرياضة</h3>
+            <h3>الأكاديمية الجهوية للتربية والتكوين — ${m.academy||'—'}</h3>
+        </div>
+        <div class="info-grid">
+            <div class="info-cell"><span class="lbl">المؤسسة:</span><span class="val">${m.institution||'—'}</span></div>
+            <div class="info-cell"><span class="lbl">السنة الدراسية:</span><span class="val">${m.year||'—'}</span></div>
+            <div class="info-cell"><span class="lbl">المستوى:</span><span class="val">${m.level||'—'}</span></div>
+            <div class="info-cell"><span class="lbl">القسم:</span><span class="val">${m.class||'—'}</span></div>
+            <div class="info-cell"><span class="lbl">رقم التلميذ:</span><span class="val" style="font-weight:700">${firstSt.id}</span></div>
+            <div class="info-cell"><span class="lbl">الإسم الكامل:</span><span class="val" style="font-weight:900">${firstSt.family} ${firstSt.name}</span></div>
+        </div>
+        <table class="sheet-tbl">
+            <thead><tr>
+                <th class="col-month" style="width:70px">الشهر</th>`;
+
+    for (let d = 1; d <= 31; d++) {
+        s += `<th class="col-day">${d}</th>`;
+    }
+    s += `<th class="col-sum">المجموع</th>`;
+    if (hasS) {
+        s += `<th class="col-s1">غير مبرر<br>يوم</th><th class="col-s2">مبرر<br>يوم</th><th class="col-s3">غير مبرر<br>ساعة</th><th class="col-s4">مبرر<br>ساعة</th>`;
+    }
+    s += `</tr>`;
+    if (hasS) {
+        s += `<tr class="sub-row"><th></th>`;
+        for (let d = 1; d <= 31; d++) { s += `<th class="col-day">X/½</th>`; }
+        s += `<th></th><th>X</th><th>X</th><th>X</th><th>X</th></tr>`;
+    }
+    s += `</thead><tbody>`;
+
+    let totalAbsencesAllMonths = 0;
+    let totalSummariesAllMonths = [0, 0, 0, 0];
+
+    classDatasets.forEach((ds: any) => {
+        const st = ds.students.find((x: any) => x.id === sid);
+        if (!st) return;
+
+        const sd = getSchoolDays(ds.students);
+
+        s += `<tr>
+            <td style="font-weight:800">${ds.metadata.monthAr || ds.metadata.month}</td>`;
+
+        for (let d = 1; d <= 31; d++) {
+            const info = parseDayValue(st.days[d]);
+            let display = '', cls = '';
+            if (!sd.has(d)) { cls = 'off-day'; }
+            else if (info.type === 'none') { cls = ''; }
+            else if (info.type === 'present') { display = '0'; cls = 'zero-v'; }
+            else if (info.type === 'absent') { display = String(info.val); cls = 'abs-v'; }
+            else if (info.type === 'special') { display = 'X'; cls = 'spec-v'; }
+            s += `<td class="col-day ${cls}">${display}</td>`;
+        }
+
+        const total = calcTotalAbsences(st);
+        totalAbsencesAllMonths += total;
+        s += `<td class="col-sum" style="font-size:8pt;color:${total > 0 ? '#dc2626' : '#059669'}">${st.totalRaw !== '' ? st.totalRaw : total}</td>`;
+
+        if (hasS) {
+            for (let i = 0; i < 4; i++) {
+                const v = st.summaries[i] || '0';
+                const nv = parseInt(v) || 0;
+                totalSummariesAllMonths[i] += nv;
+                const bg = i % 2 === 0 ? 'col-s1' : 'col-s2';
+                const clr = nv > 0 ? 'abs-v' : 'zero-v';
+                s += `<td class="${bg} ${clr}">${v}</td>`;
+            }
+        }
+        s += `</tr>`;
+    });
+
+    s += `<tr style="background-color: #f8fafc; font-weight: bold;">
+        <td style="text-align: center;">المجموع السنوي</td>`;
+    for (let d = 1; d <= 31; d++) {
+        s += `<td></td>`;
+    }
+    s += `<td class="col-sum" style="color:${totalAbsencesAllMonths > 0 ? '#dc2626' : '#059669'}">${totalAbsencesAllMonths}</td>`;
+    
+    if (hasS) {
+        for (let i = 0; i < 4; i++) {
+            const nv = totalSummariesAllMonths[i];
+            const bg = i % 2 === 0 ? 'col-s1' : 'col-s2';
+            const clr = nv > 0 ? 'abs-v' : 'zero-v';
+            s += `<td class="${bg} ${clr}">${nv}</td>`;
+        }
+    }
+    s += `</tr>`;
+
+    s += `</tbody></table>
+        <div class="ft-section">
+            <div class="ft-row"><div class="ft-cell" style="grid-column:1/-1"><span class="fl">ملاحظات:</span><div class="fl-line"></div></div></div>
+            <div class="ft-row">
+                <div class="ft-cell"><span class="fl">توقيع الأستاذ(ة):</span><div class="fl-line"></div></div>
+                <div class="ft-cell"><span class="fl">توقيع الحارس العام:</span><div class="fl-line"></div></div>
+                <div class="ft-cell"><span class="fl">توقيع المدير(ة):</span><div class="fl-line"></div></div>
+            </div>
+        </div>
+    </div>`;
+    return s;
+}
+
+function buildPrintArea(ds: any, single: any) {
+    const m = ds.metadata, sd = getSchoolDays(ds.students), students = single ? [single] : ds.students;
+    let h = `<div style="font-family:Arial,sans-serif;direction:rtl"><div style="text-align:center;margin-bottom:16px"><h2 style="font-size:18px;font-weight:800;margin:0 0 4px">ملخص الغياب الشهري للمؤسسة</h2></div><table style="width:100%;margin-bottom:12px;border:none;font-size:12px"><tr><td style="border:none;padding:2px 8px;text-align:right"><strong>الأكاديمية:</strong> ${m.academy || '—'}</td><td style="border:none;padding:2px 8px;text-align:right"><strong>المؤسسة:</strong> ${m.institution || '—'}</td><td style="border:none;padding:2px 8px;text-align:right"><strong>السنة الدراسية:</strong> ${m.year || '—'}</td></tr><tr><td style="border:none;padding:2px 8px;text-align:right"><strong>المستوى:</strong> ${m.level || '—'}</td><td style="border:none;padding:2px 8px;text-align:right"><strong>القسم:</strong> ${m.class || '—'}</td><td style="border:none;padding:2px 8px;text-align:right"><strong>الشهر:</strong> ${m.monthAr || '—'}</td></tr></table><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th style="border:1px solid #333;padding:4px 6px;background:#e8e8e8">#</th><th style="border:1px solid #333;padding:4px 6px;background:#e8e8e8">رقم التلميذ</th><th style="border:1px solid #333;padding:4px 6px;background:#e8e8e8">النسب</th><th style="border:1px solid #333;padding:4px 6px;background:#e8e8e8">الإسم</th>`;
+    for (let d = 1; d <= 31; d++) { h += `<th style="border:1px solid #333;padding:4px 6px;background:${!sd.has(d) ? '#e8e8e8;color:#aaa' : ''}">${d}</th>`; }
+    h += `<th style="border:1px solid #333;padding:4px 6px;background:#e8e8e8">المجموع</th>`;
+    ds.summaryCols.forEach((_: any, i: number) => { h += `<th style="border:1px solid #333;padding:4px 6px;background:#e8e8e8">${['يوم غ.مبرر', 'يوم مبرر', 'ساعة غ.مبرر', 'ساعة مبرر'][i] || ''}</th>`; });
+    h += `</tr></thead><tbody>`;
+    students.forEach((st: any) => {
+        h += `<tr><td style="border:1px solid #333;padding:4px 6px">${st.rank}</td><td style="border:1px solid #333;padding:4px 6px">${st.id}</td><td style="border:1px solid #333;padding:4px 6px">${st.family}</td><td style="border:1px solid #333;padding:4px 6px">${st.name}</td>`;
+        for (let d = 1; d <= 31; d++) { const info = parseDayValue(st.days[d]); const disp = info.type === 'none' ? '' : (info.type === 'present' ? '0' : (info.type === 'special' ? 'X' : info.val)); h += `<td style="border:1px solid #333;padding:4px 6px;${info.type === 'absent' ? 'background:#fee2e2;font-weight:700;color:#dc2626' : ''}">${disp}</td>`; }
+        h += `<td style="border:1px solid #333;padding:4px 6px;font-weight:700">${st.totalRaw || calcAbsentDays(st)}</td>`;
+        ds.summaryCols.forEach((_: any, i: number) => { h += `<td style="border:1px solid #333;padding:4px 6px">${st.summaries[i] || '0'}</td>`; });
+        h += `</tr>`;
+    });
+    h += `</tbody></table><p style="margin-top:12px;font-size:10px;color:#888;text-align:center">نظام إدارة الغيابات — ${new Date().toLocaleDateString('ar-MA')}</p></div>`;
+    const pa = document.getElementById('print-area'); if(pa) { pa.innerHTML = h; pa.style.display = 'block'; }
+}
+
+// Global functions for HTML
+(window as any).setPrintOrientation = (orientation: 'portrait' | 'landscape') => {
+    let styleEl = document.getElementById('print-orientation-style');
+    if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'print-orientation-style';
+        document.head.appendChild(styleEl);
+    }
+    styleEl.innerHTML = `@page { size: ${orientation}; }`;
+};
+
+(window as any).closeDetailPanel = () => {
+    const dp = document.getElementById('detail-panel'); if(dp) dp.classList.remove('open');
+    const po = document.getElementById('panel-overlay'); if(po) po.classList.remove('open');
+};
+
+(window as any).closeSheetModal = () => {
+    const sm = document.getElementById('sheet-modal'); if(sm) sm.classList.remove('open');
+};
+
+(window as any).printAbsenceSheet = () => {
+    const sheets = document.querySelectorAll('[id^="absence-sheet-el"]');
+    if (!sheets.length) return;
+    const pa = document.getElementById('sheet-print-area');
+    if(pa) {
+        pa.innerHTML = Array.from(sheets).map(el => el.outerHTML).join('');
+        pa.style.display = 'block';
+        (window as any).setPrintOrientation('landscape');
+        setTimeout(() => window.print(), 250);
+    }
+};
+
+(window as any).printAllStudentsAbsenceSheets = () => {
+    const classDatasets = getActiveClassDatasets();
+    if (!classDatasets.length) return;
+
+    const firstDs = classDatasets[0];
+    const students = firstDs.students;
+
+    if (!students || !students.length) {
+        showToast('لا يوجد تلاميذ في هذا القسم', 'error');
+        return;
+    }
+
+    showToast('جارٍ تجهيز الأوراق للطباعة...', 'info');
+
+    let html = '';
+    students.forEach((st: any, idx: number) => {
+        const sheetId = `absence-sheet-all-${idx}`;
+        html += buildCombinedAbsenceSheet(classDatasets, st.id, sheetId);
+    });
+
+    const pa = document.getElementById('sheet-print-area');
+    if(pa) {
+        pa.innerHTML = html;
+        pa.style.display = 'block';
+        (window as any).setPrintOrientation('landscape');
+        setTimeout(() => window.print(), 500);
+    }
+};
+
+(window as any).printClassAbsenceSummary = () => {
+    const classDatasets = getActiveClassDatasets();
+    if (!classDatasets.length) return;
+
+    const firstDs = classDatasets[0];
+    const students = firstDs.students;
+
+    if (!students || !students.length) {
+        showToast('لا يوجد تلاميذ في هذا القسم', 'error');
+        return;
+    }
+
+    let h = `<div class="absence-sheet" style="box-shadow:none; margin:0; padding:10mm; width:100%; min-height:100vh;">
+        <div class="sheet-hdr">
+            <h2>المملكة المغربية</h2>
+            <h3>وزارة التربية الوطنية والتعليم الأولي والرياضة</h3>
+            <h3>الأكاديمية الجهوية للتربية والتكوين — ${firstDs.metadata.academy||'—'}</h3>
+        </div>
+        <div class="info-grid" style="margin-bottom: 20px;">
+            <div class="info-cell"><span class="lbl">المؤسسة:</span><span class="val">${firstDs.metadata.institution||'—'}</span></div>
+            <div class="info-cell"><span class="lbl">السنة الدراسية:</span><span class="val">${firstDs.metadata.year||'—'}</span></div>
+            <div class="info-cell"><span class="lbl">المستوى:</span><span class="val">${firstDs.metadata.level||'—'}</span></div>
+            <div class="info-cell"><span class="lbl">القسم:</span><span class="val">${firstDs.metadata.class||'—'}</span></div>
+        </div>
+        <h3 style="text-align:center; font-weight:bold; font-size:16px; margin-bottom:15px; text-decoration:underline;">لائحة الغياب الإجمالية للتلاميذ</h3>
+        <table class="sheet-tbl" style="width:100%;">
+            <thead>
+                <tr>
+                    <th style="width:30px">ت</th>
+                    <th style="width:100px">الرقم الوطني</th>
+                    <th>الإسم الكامل</th>`;
+    
+    classDatasets.forEach((ds: any) => {
+        h += `<th>${ds.metadata.monthAr || ds.metadata.month}</th>`;
+    });
+    
+    h += `<th style="background:#e5e7eb;">المجموع العام</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+    students.forEach((st: any) => {
+        h += `<tr>
+            <td style="font-weight:bold;">${st.rank}</td>
+            <td>${st.id}</td>
+            <td style="text-align:right; padding-right:8px; font-weight:bold;">${st.family} ${st.name}</td>`;
+        
+        let grandTotal = 0;
+        classDatasets.forEach((ds: any) => {
+            const studentInMonth = ds.students.find((s: any) => s.id === st.id);
+            const total = studentInMonth ? calcTotalAbsences(studentInMonth) : 0;
+            grandTotal += total;
+            h += `<td style="${total > 0 ? 'color:#dc2626; font-weight:bold;' : 'color:#059669;'}">${total}</td>`;
+        });
+
+        h += `<td style="background:#f9fafb; font-weight:bold; ${grandTotal > 0 ? 'color:#dc2626;' : 'color:#059669;'}">${grandTotal}</td>
+        </tr>`;
+    });
+
+    h += `</tbody></table>
+        <div class="ft-section" style="margin-top: 30px;">
+            <div class="ft-row">
+                <div class="ft-cell"><span class="fl">توقيع الحارس العام:</span><div class="fl-line"></div></div>
+                <div class="ft-cell"><span class="fl">توقيع المدير(ة):</span><div class="fl-line"></div></div>
+            </div>
+        </div>
+    </div>`;
+
+    const pa = document.getElementById('sheet-print-area');
+    if(pa) {
+        pa.innerHTML = h;
+        pa.style.display = 'block';
+        (window as any).setPrintOrientation('landscape');
+        setTimeout(() => window.print(), 500);
+    }
+};
+
+(window as any).exportClassAbsenceListExcel = () => {
+    const classDatasets = getActiveClassDatasets();
+    if (!classDatasets.length) return;
+
+    const firstDs = classDatasets[0];
+    const students = firstDs.students;
+
+    if (!students || !students.length) {
+        showToast('لا يوجد تلاميذ في هذا القسم', 'error');
+        return;
+    }
+
+    const headers = ['ت', 'الرقم الوطني', 'النسب', 'الإسم'];
+    classDatasets.forEach((ds: any) => {
+        headers.push(ds.metadata.monthAr || ds.metadata.month);
+    });
+    headers.push('المجموع العام');
+
+    const data = [headers];
+
+    students.forEach((st: any) => {
+        const row = [st.rank, st.id, st.family, st.name];
+        let grandTotal = 0;
+
+        classDatasets.forEach((ds: any) => {
+            const studentInMonth = ds.students.find((s: any) => s.id === st.id);
+            const total = studentInMonth ? calcTotalAbsences(studentInMonth) : 0;
+            row.push(total);
+            grandTotal += total;
+        });
+
+        row.push(grandTotal);
+        data.push(row);
+    });
+
+    try {
+        const ws = (window as any).XLSX.utils.aoa_to_sheet(data);
+        if(!ws['!cols']) ws['!cols'] = [];
+        ws['!dir'] = 'rtl';
+        
+        const wb = (window as any).XLSX.utils.book_new();
+        (window as any).XLSX.utils.book_append_sheet(wb, ws, "لائحة الغياب");
+        (window as any).XLSX.writeFile(wb, `لائحة_الغياب_الإجمالية_${state.activeClass}.xlsx`);
+        showToast('تم تحميل لائحة الغياب بنجاح', 'success');
+    } catch (err) {
+        console.error(err);
+        showToast('حدث خطأ أثناء تصدير الملف', 'error');
+    }
+};
+
+(window as any).exportSheetPDF = async () => {
+    const sheet = document.getElementById('absence-sheet-combined');
+    if (!sheet) return;
+    showToast('جارٍ إعداد PDF...', 'info', 5000);
+    try {
+        const { jsPDF } = (window as any).jspdf;
+        const pdf = new jsPDF('l', 'mm', 'a4');
+        const imgW = 297;
+
+        const canvas = await (window as any).html2canvas(sheet, {
+            scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false,
+            width: sheet.scrollWidth, height: sheet.scrollHeight
+        });
+        const imgH = (canvas.height * imgW) / canvas.width;
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, imgW, imgH);
+
+        const ds = getActiveDataset();
+        const st = ds?.students.find((s: any) => s.id === currentSheetStudentId);
+        const classDatasets = getActiveClassDatasets();
+        const monthCount = classDatasets.length;
+        pdf.save(`ورقة_غياب_${st ? st.family : ''}_${state.activeClass}${monthCount > 1 ? '_جميع_الأشهر' : '_' + (ds?.metadata.monthAr || '')}.pdf`);
+        showToast('تم تصدير PDF بنجاح', 'success');
+    } catch (err) {
+        console.error(err);
+        showToast('خطأ في تصدير PDF', 'error');
+    }
+};
+
+(window as any).exportAllStudentsSheetsPDF = async () => {
+    const classDatasets = getActiveClassDatasets();
+    if (!classDatasets.length) return;
+
+    const firstDs = classDatasets[0];
+    const students = firstDs.students;
+
+    if (!students || !students.length) {
+        showToast('لا يوجد تلاميذ في هذا القسم', 'error');
+        return;
+    }
+
+    showToast('جارٍ تجهيز الأوراق للتصدير...', 'info');
+
+    let html = '';
+    students.forEach((st: any, idx: number) => {
+        const sheetId = `absence-sheet-export-all-${idx}`;
+        html += buildCombinedAbsenceSheet(classDatasets, st.id, sheetId);
+    });
+
+    const pa = document.getElementById('sheet-print-area');
+    if (!pa) return;
+    
+    pa.innerHTML = html;
+    pa.style.display = 'block';
+
+    try {
+        const sheets = document.querySelectorAll('[id^="absence-sheet-export-all-"]');
+        if (!sheets.length) {
+            pa.style.display = 'none';
+            return;
+        }
+
+        showToast('جارٍ إنشاء ملف PDF (قد يستغرق بعض الوقت)...', 'info', 10000);
+        const { jsPDF } = (window as any).jspdf;
+        const pdf = new jsPDF('l', 'mm', 'a4');
+        const imgW = 297;
+
+        for (let i = 0; i < sheets.length; i++) {
+            if (i > 0) pdf.addPage();
+            const canvas = await (window as any).html2canvas(sheets[i] as HTMLElement, {
+                scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false,
+                width: (sheets[i] as HTMLElement).scrollWidth, height: (sheets[i] as HTMLElement).scrollHeight
+            });
+            const imgH = (canvas.height * imgW) / canvas.width;
+            pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, imgW, imgH);
+        }
+
+        pdf.save(`أوراق_الغياب_جميع_التلاميذ_${state.activeClass}.pdf`);
+        showToast('تم تصدير PDF بنجاح', 'success');
+    } catch (err) {
+        console.error(err);
+        showToast('خطأ في تصدير PDF', 'error');
+    } finally {
+        pa.style.display = 'none';
+        pa.innerHTML = '';
+    }
+};
+
+(window as any).generateClassInvestment = async () => {
+    const classDatasets = getActiveClassDatasets();
+    if (!classDatasets.length) {
+        showToast('لا يوجد بيانات لهذا القسم', 'error');
+        return;
+    }
+    await generateAIReport('investment', classDatasets);
+};
+
+(window as any).generateAbsenceReport = async () => {
+    const classDatasets = getActiveClassDatasets();
+    if (!classDatasets.length) {
+        showToast('لا يوجد بيانات لهذا القسم', 'error');
+        return;
+    }
+    await generateAIReport('report', classDatasets);
+};
+
+(window as any).closeAiModal = () => {
+    const m = document.getElementById('ai-modal');
+    if (m) m.classList.remove('open');
+};
+
+(window as any).printAiReport = () => {
+    const content = document.getElementById('ai-content')?.innerHTML || '';
+    const pa = document.getElementById('sheet-print-area');
+    if (pa) {
+        pa.innerHTML = `<div style="padding: 20px; font-family: Arial, sans-serif; direction: rtl;" class="markdown-body">${content}</div>`;
+        pa.style.display = 'block';
+        (window as any).setPrintOrientation('portrait');
+        setTimeout(() => window.print(), 500);
+    }
+};
+
+async function generateAIReport(type: 'investment' | 'report', datasets: any[]) {
+    const m = document.getElementById('ai-modal');
+    if (m) m.classList.add('open');
+    
+    const titleEl = document.getElementById('ai-modal-title');
+    const subtitleEl = document.getElementById('ai-modal-subtitle');
+    const loadingEl = document.getElementById('ai-loading');
+    const contentEl = document.getElementById('ai-content');
+    
+    if (titleEl) titleEl.innerText = type === 'investment' ? 'استثمار غيابات القسم' : 'تقرير مفصل حول ظاهرة الغياب';
+    if (subtitleEl) subtitleEl.innerText = state.activeClass || '';
+    if (loadingEl) loadingEl.style.display = 'flex';
+    if (contentEl) contentEl.innerHTML = '';
+    
+    try {
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+            throw new Error("GEMINI_API_KEY is missing");
+        }
+        const ai = new GoogleGenAI({ apiKey });
+        
+        const firstDs = datasets[0];
+        const meta = firstDs.metadata;
+        
+        let prompt = `أنت خبير تربوي ومستشار في التوجيه المدرسي.
+بناءً على بيانات الغياب التالية للقسم "${meta.class}" (المستوى: ${meta.level}) بالمؤسسة "${meta.institution}":
+
+`;
+        
+        datasets.forEach(ds => {
+            prompt += `\n--- شهر ${ds.metadata.monthAr} ---\n`;
+            let totalAbsences = 0;
+            let unjustifiedAbsences = 0;
+            let topAbsentees: any[] = [];
+            ds.students.forEach((st: any) => {
+                const abs = calcTotalAbsences(st);
+                const unj = getUnjustified(st);
+                totalAbsences += abs;
+                unjustifiedAbsences += unj;
+                if (abs > 0) {
+                    topAbsentees.push({ name: `${st.family} ${st.name}`, abs, unj });
+                }
+            });
+            topAbsentees.sort((a, b) => b.abs - a.abs);
+            prompt += `مجموع الغيابات: ${totalAbsences} وحدة زمنية (منها ${unjustifiedAbsences} غير مبررة).\n`;
+            prompt += `أكثر التلاميذ غياباً:\n`;
+            topAbsentees.slice(0, 8).forEach(t => {
+                prompt += `- ${t.name}: ${t.abs} غياب (منها ${t.unj} غير مبرر)\n`;
+            });
+        });
+        
+        if (type === 'investment') {
+            prompt += `\n\nالمطلوب:
+كتابة "استثمار لغيابات هذا القسم" (تحليل إحصائي وتربوي للبيانات، استنتاجات حول وتيرة الغياب، ومقارنة بين الأشهر إن وجدت).
+يجب أن يكون التقرير باللغة العربية، منسقاً بشكل جيد باستخدام Markdown، ومهنياً يوجه للإدارة التربوية.`;
+        } else {
+            prompt += `\n\nالمطلوب:
+كتابة "تقرير مفصل حول ظاهرة الغياب لهذا القسم وسبل العلاج".
+يجب أن يتضمن التقرير:
+1. تشخيص الظاهرة في هذا القسم بناءً على الأرقام.
+2. الأسباب المحتملة (تربوية، اجتماعية، نفسية...).
+3. سبل العلاج والتدخلات المقترحة (دور الإدارة، الأساتذة، الأسرة، والموجه التربوي).
+يجب أن يكون التقرير باللغة العربية، منسقاً بشكل جيد باستخدام Markdown، ومهنياً.`;
+        }
+        
+        const response = await ai.models.generateContent({
+            model: "gemini-3.1-pro-preview",
+            contents: prompt,
+        });
+        
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (contentEl) contentEl.innerHTML = await marked.parse(response.text || '');
+        
+    } catch (error) {
+        console.error(error);
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (contentEl) contentEl.innerHTML = `<div class="text-red-500 text-center py-8"><i class="fa-solid fa-triangle-exclamation text-4xl mb-3"></i><br>حدث خطأ أثناء الاتصال بالذكاء الاصطناعي. يرجى المحاولة لاحقاً.<br><span class="text-xs text-gray-500 mt-4 block" style="direction: ltr; text-align: left;">${error instanceof Error ? error.message : String(error)}</span></div>`;
+    }
+}
+
+(window as any).printReport = () => {
+    const ds = getActiveDataset(); if (!ds) return; buildPrintArea(ds, null); 
+    (window as any).setPrintOrientation('portrait');
+    window.print();
+};
+
+(window as any).exportPDF = async () => {
+    const ds = getActiveDataset(); if (!ds) return;
+    showToast('جارٍ إعداد PDF...', 'info', 5000);
+    try {
+        buildPrintArea(ds, null);
+        const pa = document.getElementById('print-area');
+        if(!pa) return;
+        const canvas = await (window as any).html2canvas(pa, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false, width: pa.scrollWidth, height: pa.scrollHeight });
+        const { jsPDF } = (window as any).jspdf; const imgW = 297, pageH = 210;
+        const imgH = (canvas.height * imgW) / canvas.width;
+        const pdf = new jsPDF('l', 'mm', 'a4');
+        let hL = imgH, pos = 0;
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, pos, imgW, imgH); hL -= pageH;
+        while (hL > 0) { pos -= pageH; pdf.addPage(); pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, pos, imgW, imgH); hL -= pageH; }
+        pdf.save(`غيابات_${ds.metadata.class}_${ds.metadata.monthAr}.pdf`);
+        showToast('تم تصدير PDF', 'success');
+    } catch (err) { console.error(err); showToast('خطأ في PDF', 'error'); }
+};
+
+(window as any).clearAllData = async () => {
+    if(!state.datasets.length)return;
+    
+    if (currentUser) {
+        if (confirm('هل أنت متأكد من حذف جميع البيانات؟ سيتم حذفها من قاعدة البيانات أيضاً.')) {
+            showToast('جارٍ الحذف...', 'info');
+            for (const ds of state.datasets) {
+                const datasetId = getDatasetId(ds);
+                await deleteDatasetFromFirebase(datasetId);
+            }
+        } else {
+            return;
+        }
+    }
+    
+    state.datasets=[];state.activeClass=null;state.activeMonth=null;state.searchQuery='';
+    const si = document.getElementById('search-input') as HTMLInputElement; if(si) si.value='';
+    [barChart,lineChart,pieChart,hBarChart].forEach(c=>{if(c){c.destroy();c=null}});
+    renderAll();
+    showToast('تم حذف جميع البيانات','info');
+};
+
+(window as any).setBarChartMode = (m: string) => {
+    state.barChartMode=m;
+    const bt = document.getElementById('bar-mode-total'); if(bt) bt.classList.toggle('active',m==='total');
+    const bu = document.getElementById('bar-mode-unjustified'); if(bu) bu.classList.toggle('active',m==='unjustified');
+    updateBarChart();
+};
+
+(window as any).updateLineChart = updateLineChart;
+
+(window as any).setViewMode = (m: string) => {
+    state.viewMode=m;
+    const vc = document.getElementById('view-compact'); if(vc) vc.classList.toggle('active',m==='compact');
+    const vd = document.getElementById('view-detailed'); if(vd) vd.classList.toggle('active',m==='detailed');
+    renderTable();
+};
+
+(window as any).setSortMode = (m: string) => {
+    state.sortMode=m;
+    const sr = document.getElementById('sort-rank'); if(sr) sr.classList.toggle('active',m==='rank');
+    const sa = document.getElementById('sort-absent'); if(sa) sa.classList.toggle('active',m==='absent');
+    renderTable();
+};
+
+(window as any).handleSearch = (q: string) => {
+    state.searchQuery=q.trim();renderTable();
+};
+
+(window as any).openAbsenceSheet = (sid: string) => {
+    const classDatasets = getActiveClassDatasets();
+    if (!classDatasets.length) return;
+
+    const firstSt = classDatasets[0].students.find((s: any) => s.id === sid);
+    if (!firstSt) return;
+
+    currentSheetStudentId = sid;
+    const monthCount = classDatasets.length;
+
+    const sms = document.getElementById('sheet-modal-subtitle');
+    if(sms) sms.textContent = `${studentFullName(firstSt)} — ${state.activeClass}`;
+
+    const countBadge = document.getElementById('sheet-months-count');
+    if (countBadge) {
+        if (monthCount > 1) {
+            countBadge.style.display = '';
+            countBadge.textContent = `${monthCount} أشهر`;
+        } else {
+            countBadge.style.display = 'none';
+        }
+    }
+
+    let html = buildCombinedAbsenceSheet(classDatasets, sid, 'absence-sheet-combined');
+
+    const sp = document.getElementById('sheet-preview'); if(sp) sp.innerHTML = html;
+    const sm = document.getElementById('sheet-modal'); if(sm) sm.classList.add('open');
+};
+
+(window as any).openDetail = (sid: string) => {
+    const ds=getActiveDataset();if(!ds)return;const st=ds.students.find((s: any)=>s.id===sid);if(!st)return;
+    const sd=getSchoolDays(ds.students),ta=calcTotalAbsences(st),ad=calcAbsentDays(st);
+    let calH='';['أحد','إثنين','ثلاثاء','أربعاء','خميس','جمعة','سبت'].forEach(d=>{calH+=`<div class="text-center text-xs text-gray-400 font-semibold py-1">${d}</div>`});
+    for(let d=1;d<=31;d++){const info=parseDayValue(st.days[d]);let bg='bg-gray-50 text-gray-300';if(info.type==='present')bg='bg-emerald-50 text-emerald-600';else if(info.type==='absent')bg=info.val>=2?'bg-red-500 text-white':'bg-red-100 text-red-600';else if(info.type==='special')bg='bg-amber-100 text-amber-700';calH+=`<div class="${bg} ${!sd.has(d)?'opacity-40':''}" style="aspect-ratio:1;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.72rem;font-weight:600"><span style="font-size:.7rem">${d}</span>${info.type==='absent'?`<span style="font-size:.6rem;font-weight:700">${info.val}</span>`:''}</div>`}
+    let absH='';for(let d=1;d<=31;d++){const info=parseDayValue(st.days[d]);if(info.type==='absent'||info.type==='special'){absH+=`<div class="flex items-center justify-between py-2 border-b border-gray-50"><span class="text-sm font-semibold">اليوم ${d}</span><span class="px-3 py-1 rounded-lg text-xs font-bold ${info.type==='special'?'bg-amber-100 text-amber-700':'bg-red-100 text-red-600'}">${info.type==='special'?'X':info.val+' غياب'}</span></div>`}}
+    const pc = document.getElementById('panel-content');
+    if(pc) {
+        pc.innerHTML=`
+        <div class="flex items-center justify-between mb-6"><h3 class="text-lg font-extrabold text-gray-800">تفاصيل التلميذ</h3><button onclick="closeDetailPanel()" class="btn-ghost rounded-xl w-9 h-9 flex items-center justify-center"><i class="fa-solid fa-xmark text-gray-400"></i></button></div>
+        <div class="bg-gradient-to-l from-emerald-700 to-emerald-800 rounded-2xl p-5 text-white mb-6"><div class="flex items-center gap-4 mb-4"><div class="w-14 h-14 rounded-xl bg-white/15 flex items-center justify-center text-2xl font-extrabold">${st.family.charAt(0)}</div><div><p class="text-lg font-extrabold">${st.family} ${st.name}</p><p class="text-emerald-200 text-sm font-light">${st.id}</p></div></div><div class="grid grid-cols-3 gap-3"><div class="bg-white/10 rounded-xl p-3 text-center"><p class="text-xl font-extrabold">${ad}</p><p class="text-xs text-emerald-200">أيام غياب</p></div><div class="bg-white/10 rounded-xl p-3 text-center"><p class="text-xl font-extrabold">${ta}</p><p class="text-xs text-emerald-200">مجموع</p></div><div class="bg-white/10 rounded-xl p-3 text-center"><p class="text-xl font-extrabold">${sd.size-ad}</p><p class="text-xs text-emerald-200">حضور</p></div></div></div>
+        ${getActiveClassDatasets().length>1?`<div class="mb-6"><h4 class="text-sm font-bold text-gray-700 mb-3"><i class="fa-solid fa-chart-line text-amber-600 ml-2"></i>تطور الغياب</h4><div class="card p-4" style="max-height:220px"><canvas id="detailLineChart"></canvas></div></div>`:''}
+        <div class="mb-6"><h4 class="text-sm font-bold text-gray-700 mb-3"><i class="fa-solid fa-calendar-days text-emerald-600 ml-2"></i>تقويم — ${ds.metadata.monthAr}</h4><div class="card p-4"><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">${calH}</div></div></div>
+        ${absH?`<div class="mb-6"><h4 class="text-sm font-bold text-gray-700 mb-3"><i class="fa-solid fa-list-check text-red-500 ml-2"></i>أيام الغياب</h4><div class="card p-4">${absH}</div></div>`:`<div class="text-center py-8"><i class="fa-solid fa-circle-check text-4xl text-emerald-300 mb-3"></i><p class="text-sm text-gray-400">لا غيابات</p></div>`}
+        ${ds.summaryCols.length>0?`<div class="mb-6"><div class="card p-4"><div class="grid grid-cols-2 gap-3">${['يوم غير مبرر','يوم مبرر','ساعة غير مبررة','ساعة مبررة'].map((l,i)=>`<div class="bg-gray-50 rounded-xl p-3 text-center"><p class="text-lg font-extrabold ${parseInt(st.summaries[i])>0?'text-red-600':'text-gray-400'}">${st.summaries[i]||'0'}</p><p class="text-xs text-gray-500">${l}</p></div>`).join('')}</div></div></div>`:''}
+        <div class="flex gap-3 mt-2"><button onclick="closeDetailPanel();openAbsenceSheet('${st.id}')" class="btn btn-primary flex-1 justify-center"><i class="fa-solid fa-file-lines"></i> ورقة الغياب</button><button onclick="printStudentReport('${st.id}')" class="btn btn-outline flex-1 justify-center"><i class="fa-solid fa-print"></i> طباعة التقرير</button></div>`;
+    }
+    const dp = document.getElementById('detail-panel'); if(dp) dp.classList.add('open');
+    const po = document.getElementById('panel-overlay'); if(po) po.classList.add('open');
+    if(getActiveClassDatasets().length>1){setTimeout(()=>{const cds=getActiveClassDatasets();const canvas = document.getElementById('detailLineChart') as HTMLCanvasElement; if(canvas) { new (window as any).Chart(canvas,{type:'line',data:{labels:cds.map((d: any)=>d.metadata.monthAr),datasets:[{label:'غياب',data:cds.map((d: any)=>{const s=d.students.find((x: any)=>x.id===sid);return s?calcTotalAbsences(s):0}),borderColor:'#D97706',backgroundColor:'rgba(217,119,6,.1)',fill:true,tension:.4,pointRadius:5,pointHoverRadius:8,borderWidth:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{rtl:true,titleFont:{family:'Cairo'},bodyFont:{family:'Cairo'}}},scales:{x:{ticks:{font:{family:'Cairo',size:10}},grid:{color:'#f0f1f4'}},y:{beginAtZero:true,ticks:{font:{family:'Cairo',size:10},stepSize:1},grid:{color:'#f0f1f4'}}}}}) }},100)}
+};
+
+(window as any).printStudentReport = (sid: string) => {
+    const ds = getActiveDataset(); if (!ds) return; const st = ds.students.find((s: any) => s.id === sid); if (!st) return; (window as any).closeDetailPanel(); buildPrintArea(ds, st); 
+    (window as any).setPrintOrientation('portrait');
+    setTimeout(() => window.print(), 200);
+};
+
+// Setup event listeners
+document.addEventListener('DOMContentLoaded', () => {
+    const uploadZone=document.getElementById('upload-zone');
+    const fileInput=document.getElementById('file-input') as HTMLInputElement;
+    if(uploadZone && fileInput) {
+        ['dragenter','dragover'].forEach(e=>uploadZone.addEventListener(e,ev=>{ev.preventDefault();uploadZone.classList.add('drag-over')}));
+        ['dragleave','drop'].forEach(e=>uploadZone.addEventListener(e,ev=>{ev.preventDefault();uploadZone.classList.remove('drag-over')}));
+        uploadZone.addEventListener('drop',e=>handleFiles(e.dataTransfer!.files));
+        fileInput.addEventListener('change',e=>{handleFiles((e.target as HTMLInputElement).files!); (e.target as HTMLInputElement).value=''});
+    }
+
+    function handleFiles(files: FileList){Array.from(files).forEach(file=>{if(!file.name.match(/\.(xlsx|xls)$/i)){showToast(`"${file.name}" ليس Excel`,'error');return}if(file.size>MAX_FILE_SIZE){showToast(`"${file.name}" كبير جداً`,'error');return}const r=new FileReader();r.onload=e=>processExcel(e.target!.result,file.name);r.onerror=()=>showToast(`خطأ في القراءة`,'error');r.readAsArrayBuffer(file)})}
+
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { (window as any).closeDetailPanel(); (window as any).closeSheetModal(); } });
+    window.addEventListener('afterprint', () => { 
+        const pa = document.getElementById('print-area'); if(pa) pa.style.display = 'none'; 
+        const spa = document.getElementById('sheet-print-area'); if(spa) spa.style.display = 'none'; 
+        const styleEl = document.getElementById('print-orientation-style');
+        if (styleEl) styleEl.remove();
+    });
+    
+    // Auth listeners
+    const btnLogin = document.getElementById('btn-login');
+    const btnLogout = document.getElementById('btn-logout');
+    
+    if (btnLogin) {
+        btnLogin.addEventListener('click', async () => {
+            try {
+                await signInWithPopup(auth, googleProvider);
+            } catch (error) {
+                console.error("Login error", error);
+                showToast('فشل تسجيل الدخول', 'error');
+            }
+        });
+    }
+    
+    if (btnLogout) {
+        btnLogout.addEventListener('click', async () => {
+            try {
+                await signOut(auth);
+                state.datasets = [];
+                state.activeClass = null;
+                state.activeMonth = null;
+                renderAll();
+            } catch (error) {
+                console.error("Logout error", error);
+            }
+        });
+    }
+    
+    onAuthStateChanged(auth, (user) => {
+        currentUser = user;
+        const btnLogin = document.getElementById('btn-login');
+        const userInfo = document.getElementById('user-info');
+        const userName = document.getElementById('user-name');
+        const userAvatar = document.getElementById('user-avatar') as HTMLImageElement;
+        const authWarning = document.getElementById('auth-warning');
+        
+        if (user) {
+            if (btnLogin) btnLogin.style.display = 'none';
+            if (userInfo) userInfo.style.display = 'flex';
+            if (userName) userName.textContent = user.displayName || 'مستخدم';
+            if (userAvatar) userAvatar.src = user.photoURL || '';
+            if (authWarning) authWarning.style.display = 'none';
+            
+            loadDatasetsFromFirebase();
+        } else {
+            if (btnLogin) btnLogin.style.display = 'inline-flex';
+            if (userInfo) userInfo.style.display = 'none';
+            if (authWarning) authWarning.style.display = 'flex';
+        }
+    });
+    
+    renderAll();
+});
+
