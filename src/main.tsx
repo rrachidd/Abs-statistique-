@@ -183,7 +183,7 @@ function renderStats(){const ds=getActiveDataset();if(!ds)return;const students=
 function renderCharts(){const ds=getActiveDataset();if(!ds)return;const ml=ds.metadata.monthAr||'—';
     const ps = document.getElementById('pie-section'); if(ps) ps.style.display=ds.summaryCols.length>0?'':'none';
     const c1 = document.getElementById('chart-month-label1'); if(c1) c1.textContent=ml;
-    const c3 = document.getElementById('chart-month-label3'); if(c3) c3.textContent=ml;
+    const c3 = document.getElementById('chart-month-label3'); if(c3) c3.textContent='القسم بأكمله';
     const c4 = document.getElementById('chart-month-label4'); if(c4) c4.textContent=ml;
     updateBarChart();updateLineChart();updatePieChart();updateHBarChart();updateStudentSelect();
 }
@@ -202,7 +202,17 @@ function updateLineChart(){const ds=getActiveDataset();if(!ds)return;const cds=g
     lineChart=new (window as any).Chart(canvas,{type:'line',data:{labels,datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',rtl:true,labels:{font:{family:'Cairo',size:11},usePointStyle:true,padding:16}},tooltip:{rtl:true,textDirection:'rtl',titleFont:{family:'Cairo'},bodyFont:{family:'Cairo'},mode:'index',intersect:false}},scales:{x:{ticks:{font:{family:'Cairo',size:11}},grid:{color:'#f0f1f4'}},y:{beginAtZero:true,ticks:{font:{family:'Cairo',size:11},stepSize:1},grid:{color:'#f0f1f4'}}},interaction:{mode:'nearest',axis:'x',intersect:false}}})
 }
 
-function updatePieChart(){const ds=getActiveDataset();if(!ds||ds.summaryCols.length===0)return;let tu=0,tj=0;ds.students.forEach((st: any)=>{tu+=getUnjustified(st);tj+=getJustified(st)});if(pieChart)pieChart.destroy();
+function updatePieChart(){
+    const datasets=getActiveClassDatasets();
+    if(!datasets||datasets.length===0)return;
+    let tu=0,tj=0;
+    datasets.forEach((ds: any) => {
+        ds.students.forEach((st: any)=>{
+            tu+=getUnjustified(st);
+            tj+=getJustified(st);
+        });
+    });
+    if(pieChart)pieChart.destroy();
     const canvas = document.getElementById('pieChart') as HTMLCanvasElement;
     if(!canvas) return;
     pieChart=new (window as any).Chart(canvas,{type:'doughnut',data:{labels:['غياب غير مبرر (أيام)','غياب مبرر (أيام)'],datasets:[{data:[tu,tj],backgroundColor:['#DC2626','#059669'],borderWidth:0,hoverOffset:8}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom',rtl:true,labels:{font:{family:'Cairo',size:12},usePointStyle:true,padding:20}},tooltip:{rtl:true,titleFont:{family:'Cairo'},bodyFont:{family:'Cairo'}}}}})
