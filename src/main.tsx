@@ -409,6 +409,258 @@ function buildPrintArea(ds: any, single: any) {
     }
 };
 
+let currentCommitmentStudents: any[] = [];
+
+(window as any).closeCommitmentsModal = () => {
+    const m = document.getElementById('commitments-modal');
+    if (m) m.classList.remove('open');
+};
+
+(window as any).printCommitments = () => {
+    const classDatasets = getActiveClassDatasets();
+    if (!classDatasets.length) {
+        showToast('لا توجد بيانات', 'error');
+        return;
+    }
+    
+    const firstDs = classDatasets[0];
+    
+    // Aggregate absences across all months
+    const studentAbsences = new Map<string, { student: any, totalAbsences: number }>();
+    
+    classDatasets.forEach((ds: any) => {
+        ds.students.forEach((st: any) => {
+            const absences = calcTotalAbsences(st);
+            if (studentAbsences.has(st.id)) {
+                studentAbsences.get(st.id)!.totalAbsences += absences;
+            } else {
+                studentAbsences.set(st.id, { student: st, totalAbsences: absences });
+            }
+        });
+    });
+
+    // Filter students with more than 10 hours of absence across all months
+    currentCommitmentStudents = Array.from(studentAbsences.values())
+        .filter(item => item.totalAbsences > 10)
+        .map(item => ({ ...item.student, aggregatedAbsences: item.totalAbsences }));
+    
+    if (currentCommitmentStudents.length === 0) {
+        showToast('لا يوجد تلاميذ تجاوزوا 10 ساعات من الغياب في هذا القسم', 'info');
+        return;
+    }
+
+    const listContainer = document.getElementById('commitments-list');
+    if (listContainer) {
+        listContainer.innerHTML = currentCommitmentStudents.map((st: any, index: number) => `
+            <div id="commitment-sheet-${index}" class="bg-white p-8 rounded-xl shadow-sm border border-gray-200 mb-6" style="font-family: 'Cairo', sans-serif; direction: rtl; line-height: 2;">
+                <div style="text-align: center; margin-bottom: 40px;">
+                    <h2 style="font-size: 24px; font-weight: bold; text-decoration: underline;">التزام ولي الأمر بخصوص المواظبة</h2>
+                </div>
+                
+                <div style="font-size: 18px; margin-bottom: 30px;">
+                    <p>أنا الموقع(ة) أسفله: ........................................................................</p>
+                    <p>بصفتي ولي أمر التلميذ(ة): <strong>${studentFullName(st)}</strong></p>
+                    <p>المسجل(ة) بالقسم: <strong>${firstDs.metadata.class}</strong></p>
+                    <p>رقم التلميذ (مسار): <strong>${st.massar || '....................'}</strong></p>
+                </div>
+
+                <div style="font-size: 18px; margin-bottom: 40px; text-align: justify;">
+                    <p>أقر بأني قد أُشعرت من طرف إدارة المؤسسة بتجاوز ابني/ابنتي لـ <strong class="text-red-600">10 ساعات</strong> من الغياب (مجموع الغيابات المسجلة: <strong class="text-red-600">${st.aggregatedAbsences}</strong> ساعة).</p>
+                    <p>وبناءً عليه، <strong>ألتزم</strong> بالحرص على مواظبة ابني/ابنتي على الحضور في الأوقات المحددة للدراسة، وتبرير أي غياب مستقبلي بوثائق رسمية (شهادة طبية، إلخ) في الآجال القانونية.</p>
+                    <p>وفي حالة تمادي التلميذ(ة) في الغياب غير المبرر، أتحمل كامل المسؤولية المترتبة عن ذلك وفقاً لمقتضيات النظام الداخلي للمؤسسة.</p>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; font-size: 18px; margin-top: 50px;">
+                    <div>
+                        <p>حرر بـ .................... في ....................</p>
+                        <p style="margin-top: 20px; font-weight: bold;">توقيع ولي الأمر:</p>
+                    </div>
+                    <div>
+                        <p style="font-weight: bold;">توقيع وإدارة المؤسسة:</p>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    const m = document.getElementById('commitments-modal');
+    if (m) m.classList.add('open');
+};
+
+(window as any).executePrintCommitments = () => {
+    const classDatasets = getActiveClassDatasets();
+    if (!classDatasets.length || currentCommitmentStudents.length === 0) return;
+    const firstDs = classDatasets[0];
+
+    const pa = document.getElementById('sheet-print-area');
+    if (!pa) return;
+
+    let html = '';
+    currentCommitmentStudents.forEach((st: any) => {
+        html += `
+            <div style="page-break-after: always; padding: 40px; font-family: 'Cairo', sans-serif; direction: rtl; line-height: 2;">
+                <div style="text-align: center; margin-bottom: 40px;">
+                    <h2 style="font-size: 24px; font-weight: bold; text-decoration: underline;">التزام ولي الأمر بخصوص المواظبة</h2>
+                </div>
+                
+                <div style="font-size: 18px; margin-bottom: 30px;">
+                    <p>أنا الموقع(ة) أسفله: ........................................................................</p>
+                    <p>بصفتي ولي أمر التلميذ(ة): <strong>${studentFullName(st)}</strong></p>
+                    <p>المسجل(ة) بالقسم: <strong>${firstDs.metadata.class}</strong></p>
+                    <p>رقم التلميذ (مسار): <strong>${st.massar || '....................'}</strong></p>
+                </div>
+
+                <div style="font-size: 18px; margin-bottom: 40px; text-align: justify;">
+                    <p>أقر بأني قد أُشعرت من طرف إدارة المؤسسة بتجاوز ابني/ابنتي لـ <strong>10 ساعات</strong> من الغياب (مجموع الغيابات المسجلة: <strong>${st.aggregatedAbsences}</strong> ساعة).</p>
+                    <p>وبناءً عليه، <strong>ألتزم</strong> بالحرص على مواظبة ابني/ابنتي على الحضور في الأوقات المحددة للدراسة، وتبرير أي غياب مستقبلي بوثائق رسمية (شهادة طبية، إلخ) في الآجال القانونية.</p>
+                    <p>وفي حالة تمادي التلميذ(ة) في الغياب غير المبرر، أتحمل كامل المسؤولية المترتبة عن ذلك وفقاً لمقتضيات النظام الداخلي للمؤسسة.</p>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; font-size: 18px; margin-top: 50px;">
+                    <div>
+                        <p>حرر بـ .................... في ....................</p>
+                        <p style="margin-top: 20px; font-weight: bold;">توقيع ولي الأمر:</p>
+                    </div>
+                    <div>
+                        <p style="font-weight: bold;">توقيع وإدارة المؤسسة:</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    pa.innerHTML = html;
+    pa.style.display = 'block';
+    (window as any).setPrintOrientation('portrait');
+    (window as any).closeCommitmentsModal();
+    setTimeout(() => window.print(), 500);
+};
+
+(window as any).closeWhatsAppModal = () => {
+    const m = document.getElementById('whatsapp-modal');
+    if (m) m.classList.remove('open');
+};
+
+(window as any).openWhatsAppModal = () => {
+    const classDatasets = getActiveClassDatasets();
+    if (!classDatasets.length) {
+        showToast('لا توجد بيانات', 'error');
+        return;
+    }
+    
+    // Aggregate absences across all months
+    const studentAbsences = new Map<string, { student: any, totalAbsences: number }>();
+    
+    classDatasets.forEach((ds: any) => {
+        ds.students.forEach((st: any) => {
+            const absences = calcTotalAbsences(st);
+            if (studentAbsences.has(st.id)) {
+                studentAbsences.get(st.id)!.totalAbsences += absences;
+            } else {
+                studentAbsences.set(st.id, { student: st, totalAbsences: absences });
+            }
+        });
+    });
+
+    // Filter students with more than 10 hours of absence across all months
+    const studentsToNotify = Array.from(studentAbsences.values())
+        .filter(item => item.totalAbsences > 10)
+        .map(item => ({ ...item.student, aggregatedAbsences: item.totalAbsences }));
+    
+    if (studentsToNotify.length === 0) {
+        showToast('لا يوجد تلاميذ تجاوزوا 10 ساعات من الغياب في هذا القسم', 'info');
+        return;
+    }
+
+    const listContainer = document.getElementById('whatsapp-list');
+    if (listContainer) {
+        listContainer.innerHTML = studentsToNotify.map((st: any, index: number) => `
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col gap-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center font-bold text-sm">
+                            ${index + 1}
+                        </div>
+                        <div>
+                            <p class="font-bold text-gray-800 text-sm">${studentFullName(st)}</p>
+                            <p class="text-xs text-gray-500">مجموع الغياب التراكمي: <span class="text-red-600 font-bold">${st.aggregatedAbsences} ساعة</span></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 mt-2">
+                    <div class="relative flex-1">
+                        <i class="fa-solid fa-phone absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                        <input type="tel" id="wa-phone-${st.id}" placeholder="رقم هاتف ولي الأمر (مثال: 212600000000+)" class="w-full text-sm border border-gray-200 rounded-lg pr-8 pl-3 py-2 focus:outline-none focus:border-green-400" dir="ltr">
+                    </div>
+                    <button onclick="sendWhatsAppMessage('${st.id}', '${studentFullName(st).replace(/'/g, "\\'")}', ${st.aggregatedAbsences})" class="btn btn-primary bg-green-600 hover:bg-green-700 border-none text-xs py-2 px-4 whitespace-nowrap">
+                        <i class="fa-regular fa-paper-plane ml-1"></i> إرسال
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    const m = document.getElementById('whatsapp-modal');
+    if (m) m.classList.add('open');
+};
+
+(window as any).sendWhatsAppMessage = (studentId: string, studentName: string, absences: number) => {
+    const phoneInput = document.getElementById(`wa-phone-${studentId}`) as HTMLInputElement;
+    if (!phoneInput) return;
+    
+    let phone = phoneInput.value.trim();
+    if (!phone) {
+        showToast('المرجو إدخال رقم الهاتف', 'error');
+        return;
+    }
+
+    // Basic phone number cleaning
+    phone = phone.replace(/[^0-9+]/g, '');
+    if (phone.startsWith('0')) {
+        phone = '212' + phone.substring(1); // Assuming Morocco country code by default if starts with 0
+    }
+
+    const message = `السلام عليكم،\nننهي إلى علمكم أن ابنكم/ابنتكم *${studentName}* قد تجاوز 10 ساعات من الغياب (مجموع الغيابات: ${absences} ساعة).\nالمرجو الحضور إلى المؤسسة لتسوية وضعيته.\nالإدارة.`;
+    const encodedMessage = encodeURIComponent(message);
+    
+    const waUrl = `https://wa.me/${phone}?text=${encodedMessage}`;
+    window.open(waUrl, '_blank');
+};
+
+(window as any).downloadCommitmentsPDF = async () => {
+    if (currentCommitmentStudents.length === 0) return;
+
+    showToast('جارٍ إنشاء ملف PDF (قد يستغرق بعض الوقت)...', 'info', 10000);
+    
+    try {
+        const { jsPDF } = (window as any).jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgW = 210;
+
+        for (let i = 0; i < currentCommitmentStudents.length; i++) {
+            if (i > 0) pdf.addPage();
+            const sheet = document.getElementById(`commitment-sheet-${i}`);
+            if (sheet) {
+                const canvas = await (window as any).html2canvas(sheet, {
+                    scale: 2,
+                    useCORS: true,
+                    logging: false,
+                    backgroundColor: '#ffffff'
+                });
+                const imgData = canvas.toDataURL('image/jpeg', 1.0);
+                const imgH = (canvas.height * imgW) / canvas.width;
+                pdf.addImage(imgData, 'JPEG', 0, 0, imgW, imgH);
+            }
+        }
+
+        pdf.save(`التزامات_الغياب_${getActiveDataset()?.metadata.class}.pdf`);
+        showToast('تم تحميل ملف PDF بنجاح', 'success');
+    } catch (err) {
+        console.error(err);
+        showToast('حدث خطأ أثناء إنشاء PDF', 'error');
+    }
+};
+
 (window as any).printAllStudentsAbsenceSheets = () => {
     const classDatasets = getActiveClassDatasets();
     if (!classDatasets.length) return;
@@ -438,6 +690,13 @@ function buildPrintArea(ds: any, single: any) {
     }
 };
 
+let currentSummaryHtml = '';
+
+(window as any).closeSummaryModal = () => {
+    const m = document.getElementById('summary-modal');
+    if (m) m.classList.remove('open');
+};
+
 (window as any).printClassAbsenceSummary = () => {
     const classDatasets = getActiveClassDatasets();
     if (!classDatasets.length) return;
@@ -450,7 +709,7 @@ function buildPrintArea(ds: any, single: any) {
         return;
     }
 
-    let h = `<div class="absence-sheet" style="box-shadow:none; margin:0; padding:10mm; width:100%; min-height:100vh;">
+    let h = `<div id="summary-print-content" class="absence-sheet" style="box-shadow:none; margin:0; padding:10mm; width:100%; min-height:100vh; background:white;">
         <div class="sheet-hdr">
             <h2>المملكة المغربية</h2>
             <h3>وزارة التربية الوطنية والتعليم الأولي والرياضة</h3>
@@ -467,8 +726,8 @@ function buildPrintArea(ds: any, single: any) {
             <thead>
                 <tr>
                     <th style="width:30px">ت</th>
-                    <th style="width:100px">الرقم الوطني</th>
-                    <th>الإسم الكامل</th>`;
+                    <th style="width:75px">الرقم الوطني</th>
+                    <th style="width:35%">الإسم الكامل</th>`;
     
     classDatasets.forEach((ds: any) => {
         h += `<th>${ds.metadata.monthAr || ds.metadata.month}</th>`;
@@ -506,12 +765,54 @@ function buildPrintArea(ds: any, single: any) {
         </div>
     </div>`;
 
+    currentSummaryHtml = h;
+    
+    const content = document.getElementById('summary-content');
+    if (content) content.innerHTML = h;
+    
+    const m = document.getElementById('summary-modal');
+    if (m) m.classList.add('open');
+};
+
+(window as any).executePrintSummary = () => {
     const pa = document.getElementById('sheet-print-area');
     if(pa) {
-        pa.innerHTML = h;
+        pa.innerHTML = currentSummaryHtml;
         pa.style.display = 'block';
         (window as any).setPrintOrientation('landscape');
+        (window as any).closeSummaryModal();
         setTimeout(() => window.print(), 500);
+    }
+};
+
+(window as any).downloadSummaryPDF = async () => {
+    const content = document.getElementById('summary-print-content');
+    if (!content) return;
+    
+    showToast('جارٍ إنشاء ملف PDF (قد يستغرق بعض الوقت)...', 'info', 10000);
+    
+    try {
+        const { jsPDF } = (window as any).jspdf;
+        const pdf = new jsPDF('l', 'mm', 'a4');
+        const imgW = 297;
+        
+        const canvas = await (window as any).html2canvas(content, {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff'
+        });
+        
+        const imgData = canvas.toDataURL('image/jpeg', 1.0);
+        const imgH = (canvas.height * imgW) / canvas.width;
+        
+        pdf.addImage(imgData, 'JPEG', 0, 0, imgW, imgH);
+        pdf.save(`لائحة_الغياب_الإجمالية_${getActiveDataset()?.metadata.class}.pdf`);
+        
+        showToast('تم تحميل ملف PDF بنجاح', 'success');
+    } catch (err) {
+        console.error(err);
+        showToast('حدث خطأ أثناء إنشاء PDF', 'error');
     }
 };
 
