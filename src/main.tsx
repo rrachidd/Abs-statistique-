@@ -651,6 +651,188 @@ function buildPrintArea(ds: any, single: any) {
     await generateAIReport('investment', classDatasets);
 };
 
+let compareChartInstance: any = null;
+
+(window as any).compareClasses = () => {
+    if (!state.datasets || state.datasets.length === 0) {
+        showToast('لا توجد بيانات للمقارنة', 'error');
+        return;
+    }
+
+    const classesData: Record<string, any> = {};
+    state.datasets.forEach((ds: any) => {
+        const className = ds.metadata.class;
+        if (!classesData[className]) {
+            classesData[className] = {
+                className: className,
+                totalAbsences: 0,
+                unjustified: 0,
+                students: new Set(),
+                months: new Set()
+            };
+        }
+        classesData[className].months.add(ds.metadata.monthAr);
+        ds.students.forEach((st: any) => {
+            classesData[className].students.add(`${st.family} ${st.name}`);
+            classesData[className].totalAbsences += calcTotalAbsences(st);
+            classesData[className].unjustified += getUnjustified(st);
+        });
+    });
+
+    const comparisonList = Object.values(classesData).map(c => ({
+        className: c.className,
+        studentCount: c.students.size,
+        totalAbsences: c.totalAbsences,
+        unjustified: c.unjustified,
+        avgAbsence: c.students.size ? (c.totalAbsences / c.students.size).toFixed(2) : '0',
+        months: Array.from(c.months).join('، ')
+    }));
+
+    comparisonList.sort((a, b) => b.totalAbsences - a.totalAbsences);
+
+    const tbody = document.getElementById('compare-table-body');
+    if (tbody) {
+        tbody.innerHTML = comparisonList.map(c => `
+            <tr class="border-b border-gray-100 hover:bg-gray-50">
+                <td class="py-2 px-3 font-medium text-gray-800">${c.className}</td>
+                <td class="py-2 px-3 text-gray-600">${c.studentCount}</td>
+                <td class="py-2 px-3 text-red-600 font-bold">${c.totalAbsences}</td>
+                <td class="py-2 px-3 text-orange-500">${c.unjustified}</td>
+                <td class="py-2 px-3 text-gray-600">${c.avgAbsence}</td>
+            </tr>
+        `).join('');
+    }
+
+    const ctx = document.getElementById('compare-chart') as HTMLCanvasElement;
+    if (ctx) {
+        if (compareChartInstance) compareChartInstance.destroy();
+        compareChartInstance = new (window as any).Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: comparisonList.map(c => c.className),
+                datasets: [
+                    {
+                        label: 'مجموع الغيابات',
+                        data: comparisonList.map(c => c.totalAbsences),
+                        backgroundColor: '#ef4444',
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'الغيابات غير المبررة',
+                        data: comparisonList.map(c => c.unjustified),
+                        backgroundColor: '#f97316',
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top', labels: { font: { family: 'Cairo' } } },
+                    tooltip: { titleFont: { family: 'Cairo' }, bodyFont: { family: 'Cairo' } }
+                },
+                scales: {
+                    y: { beginAtZero: true, ticks: { font: { family: 'Cairo' } } },
+                    x: { ticks: { font: { family: 'Cairo' } } }
+                }
+            }
+        });
+    }
+
+    const aiContent = document.getElementById('compare-ai-content');
+    if (aiContent) {
+        aiContent.innerHTML = '<div class="text-center text-gray-400 py-4 text-sm">انقر على "توليد استنتاجات" للحصول على قراءة تحليلية للمقارنة.</div>';
+    }
+    const btnAi = document.getElementById('btn-generate-compare-ai');
+    if (btnAi) btnAi.style.display = 'inline-block';
+
+    (window as any).currentComparisonData = comparisonList;
+
+    const m = document.getElementById('compare-modal');
+    if (m) m.classList.add('open');
+};
+
+(window as any).closeCompareModal = () => {
+    const m = document.getElementById('compare-modal');
+    if (m) m.classList.remove('open');
+};
+
+(window as any).printCompareReport = () => {
+    const pa = document.getElementById('sheet-print-area');
+    const modalContent = document.getElementById('compare-print-area');
+    if (pa && modalContent) {
+        const canvas = document.getElementById('compare-chart') as HTMLCanvasElement;
+        const chartImg = canvas ? `<img src="${canvas.toDataURL()}" style="max-width: 100%; height: auto; margin-bottom: 20px;">` : '';
+        
+        const tableHtml = document.querySelector('#compare-print-area .overflow-x-auto')?.outerHTML || '';
+        const aiHtml = document.getElementById('compare-ai-content')?.outerHTML || '';
+        
+        pa.innerHTML = `
+            <div style="padding: 20px; font-family: Arial, sans-serif; direction: rtl;">
+                <h2 style="text-align: center; margin-bottom: 20px; color: #111;">تقرير مقارنة الأقسام</h2>
+                ${tableHtml}
+                <div style="margin: 20px 0; text-align: center;">${chartImg}</div>
+                <div class="markdown-body" style="direction: rtl; text-align: right;">
+                    <h3 style="color: #4f46e5; margin-bottom: 10px;">استنتاجات تحليلية</h3>
+                    ${aiHtml}
+                </div>
+            </div>
+        `;
+        pa.style.display = 'block';
+        (window as any).setPrintOrientation('portrait');
+        setTimeout(() => window.print(), 500);
+    }
+};
+
+(window as any).generateCompareAI = async () => {
+    const data = (window as any).currentComparisonData;
+    if (!data || data.length === 0) return;
+
+    const loadingEl = document.getElementById('compare-ai-loading');
+    const contentEl = document.getElementById('compare-ai-content');
+    const btnAi = document.getElementById('btn-generate-compare-ai');
+    
+    if (loadingEl) loadingEl.style.display = 'flex';
+    if (contentEl) contentEl.innerHTML = '';
+    if (btnAi) btnAi.style.display = 'none';
+
+    try {
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) throw new Error("GEMINI_API_KEY is missing");
+        const ai = new GoogleGenAI({ apiKey });
+
+        let prompt = `أنت خبير تربوي ومحلل بيانات مدرسية.
+إليك بيانات مقارنة الغياب بين عدة أقسام في المؤسسة:
+
+`;
+        data.forEach((c: any) => {
+            prompt += `- القسم: ${c.className} | عدد التلاميذ: ${c.studentCount} | مجموع الغيابات: ${c.totalAbsences} | الغيابات غير المبررة: ${c.unjustified} | متوسط الغياب للتلميذ: ${c.avgAbsence}\n`;
+        });
+
+        prompt += `\nالمطلوب:
+كتابة استنتاجات تحليلية دقيقة تقارن بين هذه الأقسام.
+1. تحديد الأقسام التي تعاني من أكبر نسبة غياب وتلك الأكثر انضباطاً.
+2. تحليل العلاقة بين الغيابات المبررة وغير المبررة في الأقسام.
+3. تقديم توصيات عامة للإدارة للتعامل مع الأقسام الأكثر تغيباً.
+يجب أن يكون الرد باللغة العربية، منسقاً باستخدام Markdown، ومهنياً.`;
+
+        const response = await ai.models.generateContent({
+            model: "gemini-3.1-pro-preview",
+            contents: prompt,
+        });
+
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (contentEl) contentEl.innerHTML = await marked.parse(response.text || '');
+
+    } catch (error) {
+        console.error(error);
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (btnAi) btnAi.style.display = 'inline-block';
+        if (contentEl) contentEl.innerHTML = `<div class="text-red-500 text-center py-4"><i class="fa-solid fa-triangle-exclamation text-2xl mb-2"></i><br>حدث خطأ أثناء الاتصال بالذكاء الاصطناعي.<br><span class="text-xs text-gray-500 mt-4 block" style="direction: ltr; text-align: left;">${error instanceof Error ? error.message : String(error)}</span></div>`;
+    }
+};
+
 (window as any).generateAbsenceReport = async () => {
     const classDatasets = getActiveClassDatasets();
     if (!classDatasets.length) {
@@ -781,26 +963,89 @@ async function generateAIReport(type: 'investment' | 'report', datasets: any[]) 
     } catch (err) { console.error(err); showToast('خطأ في PDF', 'error'); }
 };
 
+let confirmCallback: (() => void) | null = null;
+
+(window as any).showConfirmModal = (message: string, callback: () => void) => {
+    const m = document.getElementById('confirm-modal');
+    const msgEl = document.getElementById('confirm-modal-message');
+    if (m && msgEl) {
+        msgEl.textContent = message;
+        confirmCallback = callback;
+        m.classList.add('open');
+    }
+};
+
+(window as any).closeConfirmModal = () => {
+    const m = document.getElementById('confirm-modal');
+    if (m) m.classList.remove('open');
+    confirmCallback = null;
+};
+
+document.getElementById('confirm-modal-yes')?.addEventListener('click', () => {
+    if (confirmCallback) confirmCallback();
+    (window as any).closeConfirmModal();
+});
+
+(window as any).removeActiveClass = async () => {
+    if (!state.activeClass) return;
+    
+    const classDatasets = getActiveClassDatasets();
+    if (!classDatasets.length) return;
+
+    (window as any).showConfirmModal(`هل أنت متأكد من حذف جميع بيانات القسم "${state.activeClass}"؟`, async () => {
+        showToast('جارٍ حذف القسم...', 'info');
+        
+        // Remove from Firebase if logged in
+        if (currentUser) {
+            for (const ds of classDatasets) {
+                const datasetId = getDatasetId(ds);
+                await deleteDatasetFromFirebase(datasetId);
+            }
+        }
+        
+        // Remove from local state
+        state.datasets = state.datasets.filter((ds: any) => ds.metadata.class !== state.activeClass);
+        
+        // Reset active class
+        const remainingClasses = Array.from(getUniqueClasses().keys());
+        if (remainingClasses.length > 0) {
+            state.activeClass = remainingClasses[0];
+            const cm = getClassMonths(state.activeClass);
+            state.activeMonth = cm.length ? cm[0].metadata.month : null;
+        } else {
+            state.activeClass = null;
+            state.activeMonth = null;
+        }
+        
+        state.searchQuery = '';
+        const si = document.getElementById('search-input') as HTMLInputElement; 
+        if (si) si.value = '';
+        
+        [barChart, lineChart, pieChart, hBarChart].forEach(c => { if (c) { c.destroy(); c = null; } });
+        
+        renderAll();
+        showToast('تم حذف القسم بنجاح', 'success');
+    });
+};
+
 (window as any).clearAllData = async () => {
     if(!state.datasets.length)return;
     
-    if (currentUser) {
-        if (confirm('هل أنت متأكد من حذف جميع البيانات؟ سيتم حذفها من قاعدة البيانات أيضاً.')) {
+    (window as any).showConfirmModal('هل أنت متأكد من حذف جميع البيانات؟ سيتم حذفها من قاعدة البيانات أيضاً.', async () => {
+        if (currentUser) {
             showToast('جارٍ الحذف...', 'info');
             for (const ds of state.datasets) {
                 const datasetId = getDatasetId(ds);
                 await deleteDatasetFromFirebase(datasetId);
             }
-        } else {
-            return;
         }
-    }
-    
-    state.datasets=[];state.activeClass=null;state.activeMonth=null;state.searchQuery='';
-    const si = document.getElementById('search-input') as HTMLInputElement; if(si) si.value='';
-    [barChart,lineChart,pieChart,hBarChart].forEach(c=>{if(c){c.destroy();c=null}});
-    renderAll();
-    showToast('تم حذف جميع البيانات','info');
+        
+        state.datasets=[];state.activeClass=null;state.activeMonth=null;state.searchQuery='';
+        const si = document.getElementById('search-input') as HTMLInputElement; if(si) si.value='';
+        [barChart,lineChart,pieChart,hBarChart].forEach(c=>{if(c){c.destroy();c=null}});
+        renderAll();
+        showToast('تم حذف جميع البيانات','info');
+    });
 };
 
 (window as any).setBarChartMode = (m: string) => {
