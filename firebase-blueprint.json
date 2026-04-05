@@ -31,9 +31,26 @@
         }
       },
       "required": ["userId", "metadata", "students"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "User settings, such as guardians phone numbers",
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "description": "The settings data"
+        }
+      }
     }
   },
   "firestore": {
+    "/users/{userId}/settings/{settingId}": {
+      "schema": {
+        "$ref": "#/entities/Settings"
+      },
+      "description": "Settings for the user"
+    },
     "/users/{userId}/datasets/{datasetId}": {
       "schema": {
         "$ref": "#/entities/Dataset"

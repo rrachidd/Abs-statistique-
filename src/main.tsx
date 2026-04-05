@@ -9,7 +9,7 @@ const MONTH_NAMES={'janvier':'يناير','février':'فبراير','mars':'ما
 const MONTH_ORDER=['يناير','فبراير','مارس','أبريل','ماي','يونيو','يوليوز','غشت','شتنبر','أكتوبر','نونبر','دجنبر'];
 const CHART_COLORS=['#059669','#D97706','#DC2626','#7C3AED','#2563EB','#0891B2','#C026D3','#EA580C','#65A30D','#0D9488','#9333EA','#E11D48','#CA8A04','#0369A1','#BE185D','#4F46E5','#15803D','#B45309'];
 
-const state: any = {datasets:[],activeClass:null,activeMonth:null,searchQuery:'',viewMode:'compact',sortMode:'rank',barChartMode:'total'};
+const state: any = {datasets:[],guardians:{},guardianDetails:{},activeClass:null,activeMonth:null,searchQuery:'',viewMode:'compact',sortMode:'rank',barChartMode:'total'};
 let barChart: any = null, lineChart: any = null, pieChart: any = null, hBarChart: any = null, currentSheetStudentId: any = null;
 let currentUser: any = null;
 
@@ -56,6 +56,32 @@ async function saveDatasetToFirebase(dataset: any) {
     } catch (error) {
         console.error("Error saving dataset:", error);
         showToast('حدث خطأ أثناء الحفظ في قاعدة البيانات', 'error');
+    }
+}
+
+async function saveGuardiansToFirebase() {
+    if (!currentUser) return;
+    try {
+        const docRef = doc(db, `users/${currentUser.uid}/settings`, 'guardians');
+        await setDoc(docRef, { data: state.guardians, details: state.guardianDetails });
+        console.log("Guardians saved to Firebase");
+    } catch (error) {
+        console.error("Error saving guardians:", error);
+    }
+}
+
+async function loadGuardiansFromFirebase() {
+    if (!currentUser) return;
+    try {
+        const querySnapshot = await getDocs(collection(db, `users/${currentUser.uid}/settings`));
+        querySnapshot.forEach((doc) => {
+            if (doc.id === 'guardians') {
+                state.guardians = doc.data().data || {};
+                state.guardianDetails = doc.data().details || {};
+            }
+        });
+    } catch (error) {
+        console.error("Error loading guardians:", error);
     }
 }
 
@@ -123,6 +149,158 @@ function processExcel(buffer: any,fileName: string){
             showToast('البيانات محفوظة محلياً فقط. يرجى تسجيل الدخول لحفظها في السحابة.', 'info', 5000);
         }
     }catch(err: any){console.error(err);showToast(`خطأ: ${err.message}`,'error')}
+}
+
+function processGuardianExcel(buffer: any) {
+    try {
+        const wb = (window as any).XLSX.read(buffer, { type: 'array' });
+        const sn = wb.SheetNames[0];
+        const raw = (window as any).XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: '', blankrows: false });
+        
+        if (raw.length < 2) {
+            showToast(`ملف أولياء الأمور فارغ`, 'error');
+            return;
+        }
+
+        // Find header row
+        let headerIdx = -1;
+        let massarCol = -1;
+        let nameCol = -1;
+        let familyCol = -1;
+        let fullNameCol = -1;
+        let phoneCols: number[] = [];
+        let fatherCol = -1;
+        let motherCol = -1;
+        let guardianCol = -1;
+
+        for (let i = 0; i < Math.min(10, raw.length); i++) {
+            const row = raw[i] as string[];
+            for (let j = 0; j < row.length; j++) {
+                const cell = String(row[j]).trim().toLowerCase();
+                if (cell.includes('مسار') || cell.includes('رقم التلميذ') || cell.includes('الرقم الوطني') || cell.includes('massar')) massarCol = j;
+                if (cell.includes('هاتف') || cell.includes('رقم الهاتف') || cell.includes('الهاتف') || cell.includes('phone') || cell.includes('téléphone') || cell.includes('tel') || cell.includes('أب') || cell.includes('أم') || cell.includes('ولي')) {
+                    if (cell.includes('هاتف') || cell.includes('tel') || cell.includes('phone') || cell.includes('gsm') || cell.includes('محمول')) {
+                        if (!phoneCols.includes(j)) phoneCols.push(j);
+                    }
+                }
+                if (cell === 'الاسم' || cell === 'الإسم' || cell.includes('الإسم بالعربية') || cell.includes('الاسم بالعربية') || cell === 'prenom' || cell === 'prénom') nameCol = j;
+                if (cell === 'النسب' || cell.includes('النسب بالعربية') || cell === 'nom') familyCol = j;
+                if (cell.includes('الاسم الكامل') || cell.includes('الإسم الكامل') || cell === 'التلميذ' || cell === 'اسم التلميذ' || cell === 'nom et prenom' || cell === 'nom complet') fullNameCol = j;
+                
+                if (cell.includes('اسم الأب') || cell.includes('إسم الأب') || cell.includes('الأب') || cell.includes('pere') || cell.includes('père')) fatherCol = j;
+                if (cell.includes('اسم الأم') || cell.includes('إسم الأم') || cell.includes('الأم') || cell.includes('mere') || cell.includes('mère')) motherCol = j;
+                if (cell.includes('اسم الولي') || cell.includes('إسم الولي') || cell.includes('الولي') || cell.includes('tuteur')) guardianCol = j;
+            }
+            if (massarCol !== -1 || fullNameCol !== -1 || (nameCol !== -1 && familyCol !== -1)) {
+                headerIdx = i;
+                break;
+            }
+        }
+
+        if (headerIdx === -1) {
+            showToast(`لم يتم العثور على أعمدة تعريف التلميذ في الملف`, 'error');
+            return;
+        }
+
+        let addedCount = 0;
+        for (let i = headerIdx + 1; i < raw.length; i++) {
+            const row = raw[i] as string[];
+            
+            // Extract all phone numbers from the row
+            let phones: string[] = [];
+            
+            // First check phone columns
+            phoneCols.forEach(col => {
+                const val = String(row[col] || '').trim();
+                if (val) {
+                    const normalizedVal = val.replace(/[\s\.\-]/g, '');
+                    const matches = normalizedVal.match(/(?:\+|00)?(?:212|0)[567]\d{8}/g) || normalizedVal.match(/\+?\d{9,15}/g);
+                    if (matches) phones.push(...matches);
+                }
+            });
+
+            // If no phones found in phone columns, scan the whole row
+            if (phones.length === 0) {
+                for (let j = 0; j < row.length; j++) {
+                    if (j === massarCol || j === nameCol || j === familyCol || j === fullNameCol) continue;
+                    const val = String(row[j] || '').trim();
+                    if (val) {
+                        const normalizedVal = val.replace(/[\s\.\-]/g, '');
+                        const matches = normalizedVal.match(/(?:\+|00)?(?:212|0)[567]\d{8}/g) || normalizedVal.match(/\+?\d{9,15}/g);
+                        if (matches) phones.push(...matches);
+                    }
+                }
+            }
+
+            // Deduplicate phones
+            phones = [...new Set(phones)];
+            const phoneStr = phones.join(' - ');
+            
+            const fatherName = fatherCol !== -1 ? String(row[fatherCol] || '').trim() : '';
+            const motherName = motherCol !== -1 ? String(row[motherCol] || '').trim() : '';
+            const guardianName = guardianCol !== -1 ? String(row[guardianCol] || '').trim() : '';
+
+            if (!phoneStr && !fatherName && !motherName && !guardianName) continue;
+
+            let keys = [];
+            if (massarCol !== -1) {
+                const massar = String(row[massarCol] || '').trim().toLowerCase();
+                if (massar) keys.push(massar);
+            }
+            
+            let family = '';
+            let name = '';
+            if (familyCol !== -1) family = String(row[familyCol] || '').trim().toLowerCase();
+            if (nameCol !== -1) name = String(row[nameCol] || '').trim().toLowerCase();
+            
+            if (family && name) {
+                keys.push(`${family} ${name}`.replace(/\s+/g, ' '));
+                keys.push(`${name} ${family}`.replace(/\s+/g, ' '));
+            }
+            
+            if (fullNameCol !== -1) {
+                const fullName = String(row[fullNameCol] || '').trim().toLowerCase().replace(/\s+/g, ' ');
+                if (fullName) keys.push(fullName);
+            }
+
+            if (keys.length > 0) {
+                keys.forEach(k => {
+                    if (phoneStr) {
+                        if (state.guardians[k] && state.guardians[k] !== phoneStr) {
+                            const existing = state.guardians[k].split(' - ');
+                            const combined = [...new Set([...existing, ...phones])].join(' - ');
+                            state.guardians[k] = combined;
+                        } else {
+                            state.guardians[k] = phoneStr;
+                        }
+                    }
+                    
+                    if (!state.guardianDetails[k]) state.guardianDetails[k] = {};
+                    if (fatherName) state.guardianDetails[k].father = fatherName;
+                    if (motherName) state.guardianDetails[k].mother = motherName;
+                    if (guardianName) state.guardianDetails[k].guardian = guardianName;
+                });
+                addedCount++;
+            }
+        }
+
+        if (addedCount > 0) {
+            saveGuardiansToFirebase();
+            showToast(`تم استيراد أرقام هواتف ${addedCount} ولي أمر بنجاح`, 'success');
+            renderTable();
+            // Re-render WhatsApp modal if it's open
+            const m = document.getElementById('whatsapp-modal');
+            if (m && m.classList.contains('open')) {
+                (window as any).openWhatsAppModal();
+            }
+        } else {
+            showToast(`لم يتم العثور على أرقام هواتف صالحة`, 'info');
+        }
+
+    } catch (err: any) {
+        console.error(err);
+        showToast(`خطأ في استيراد ملف أولياء الأمور: ${err.message}`, 'error');
+    }
 }
 
 function parseData(raw: any[]){
@@ -224,6 +402,110 @@ function updateHBarChart(){const ds=getActiveDataset();if(!ds)return;const sorte
     hBarChart=new (window as any).Chart(canvas,{type:'bar',data:{labels:sorted.map(st=>studentFullName(st)),datasets:[{label:'المجموع',data:sorted.map(st=>calcTotalAbsences(st)),backgroundColor:sorted.map((_,i)=>i===0?'#DC2626':i<3?'#F59E0B':'#059669'),borderRadius:4,maxBarThickness:20}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{rtl:true,titleFont:{family:'Cairo'},bodyFont:{family:'Cairo'}}},scales:{x:{beginAtZero:true,ticks:{font:{family:'Cairo',size:10},stepSize:1},grid:{color:'#f0f1f4'}},y:{ticks:{font:{family:'Cairo',size:10}},grid:{display:false}}}}})
 }
 
+function getStudentPhone(st: any): string {
+    if (!st) return '';
+    
+    const id = st.id ? String(st.id).trim().toLowerCase() : '';
+    const family = st.family ? String(st.family).trim().toLowerCase() : '';
+    const name = st.name ? String(st.name).trim().toLowerCase() : '';
+    
+    const f1 = `${family} ${name}`.replace(/\s+/g, ' ').trim();
+    const f2 = `${name} ${family}`.replace(/\s+/g, ' ').trim();
+    
+    // 1. Exact match on ID
+    if (id && state.guardians[id]) return state.guardians[id];
+    if (id && state.guardians[st.id]) return state.guardians[st.id]; // Fallback to original case
+    
+    // 2. Exact match on Name combinations
+    if (state.guardians[f1]) return state.guardians[f1];
+    if (state.guardians[f2]) return state.guardians[f2];
+    
+    const origF1 = `${st.family} ${st.name}`.replace(/\s+/g, ' ').trim();
+    const origF2 = `${st.name} ${st.family}`.replace(/\s+/g, ' ').trim();
+    if (state.guardians[origF1]) return state.guardians[origF1];
+    if (state.guardians[origF2]) return state.guardians[origF2];
+    
+    // 3. Case-insensitive search across all keys
+    for (const key in state.guardians) {
+        const k = key.trim().toLowerCase();
+        if (!k) continue;
+        
+        if (id && k === id) return state.guardians[key];
+        if (k === f1 || k === f2) return state.guardians[key];
+        
+        // Sometimes names in Excel have extra spaces between words
+        const normalizedK = k.replace(/\s+/g, ' ');
+        if (normalizedK === f1 || normalizedK === f2) return state.guardians[key];
+    }
+    
+    return '';
+}
+
+(window as any).updateStudentPhone = (studentId: string, phone: string) => {
+    state.guardians[studentId.toLowerCase()] = phone;
+    saveGuardiansToFirebase();
+    showToast('تم حفظ رقم الهاتف', 'success');
+    renderTable();
+};
+
+(window as any).enablePhoneEdit = (studentId: string, currentPhone: string) => {
+    const td = document.getElementById(`phone-cell-${studentId}`);
+    if (td) {
+        td.innerHTML = `<input type="text"
+            class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-sm font-mono text-right"
+            placeholder="أدخل رقم الهاتف..."
+            value="${currentPhone}"
+            onchange="updateStudentPhone('${studentId}', this.value)"
+            onblur="renderGuardiansTable()" />`;
+        const input = td.querySelector('input');
+        if (input) input.focus();
+    }
+};
+
+function renderGuardiansTable() {
+    const ds = getActiveDataset();
+    const gtc = document.getElementById('guardians-table-card');
+    const gtb = document.getElementById('guardians-table-body');
+    
+    if (!ds || !gtc || !gtb) return;
+    
+    let students = [...ds.students];
+    if (state.searchQuery) {
+        const q = state.searchQuery.toLowerCase();
+        students = students.filter(st => st.family.toLowerCase().includes(q) || st.name.toLowerCase().includes(q) || st.id.toLowerCase().includes(q));
+    }
+    
+    let b = '';
+    
+    students.forEach((st, idx) => {
+        const phone = getStudentPhone(st);
+        
+        let phoneHtml = '';
+        if (phone) {
+            phoneHtml = `<div class="flex items-center justify-end gap-3">
+                <span class="text-gray-700 font-mono text-sm">${phone}</span>
+                <button onclick="enablePhoneEdit('${st.id}', '${phone}')" class="text-gray-400 hover:text-emerald-600 transition-colors" title="تعديل الرقم"><i class="fa-solid fa-pen text-xs"></i></button>
+            </div>`;
+        } else {
+            phoneHtml = `<input type="text"
+                   class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-sm font-mono text-right"
+                   placeholder="أدخل رقم الهاتف..."
+                   onchange="updateStudentPhone('${st.id}', this.value)" />`;
+        }
+        
+        b += `<tr class="fade-up" style="animation-delay:${Math.min(idx*20,400)}ms">
+            <td class="text-right font-bold">${st.family} ${st.name}</td>
+            <td class="text-gray-500 text-sm">${st.id}</td>
+            <td dir="ltr" id="phone-cell-${st.id}">
+                ${phoneHtml}
+            </td>
+        </tr>`;
+    });
+    
+    gtb.innerHTML = b;
+    gtc.style.display = students.length > 0 ? '' : 'none';
+}
+
 function renderTable(){
     const ds=getActiveDataset();if(!ds)return;let students=[...ds.students];
     if(state.searchQuery){const q=state.searchQuery.toLowerCase();students=students.filter(st=>st.family.toLowerCase().includes(q)||st.name.toLowerCase().includes(q)||st.id.toLowerCase().includes(q))}
@@ -242,10 +524,20 @@ function renderTable(){
         b+=`<tr class="fade-up" style="animation-delay:${Math.min(idx*20,400)}ms"><td class="sticky-col right-0 text-right font-semibold text-gray-500 text-xs" style="background:var(--card)">${st.rank}</td><td class="sticky-col text-right font-bold" style="background:var(--card);right:45px">${st.family}</td><td class="sticky-col text-right" style="background:var(--card);right:155px">${st.name}</td><td><span class="inline-flex items-center justify-center w-9 h-7 rounded-lg text-sm font-bold ${ha?'bg-red-50 text-red-600':'bg-emerald-50 text-emerald-600'}">${st.totalRaw!==''?st.totalRaw:ad}</span></td>`;
         ds.summaryCols.forEach((_: any,i: number)=>{const v=st.summaries[i]||'0';b+=`<td><span class="${parseInt(v)>0?'text-red-600 font-bold':'text-gray-400'}">${v}</span></td>`});
         if(isD){for(let d=1;d<=31;d++){const info=parseDayValue(st.days[d]);let cls='day-none';if(info.type==='present')cls='day-present';else if(info.type==='absent')cls=info.val>=2?'day-absent-high':'day-absent';else if(info.type==='special')cls='day-special';const disp=info.type==='none'?'—':(info.type==='present'?'0':(info.type==='special'?'X':info.val));b+=`<td><span class="day-cell ${cls}">${disp}</span></td>`}}
-        b+=`<td class="no-print"><div class="flex items-center justify-center gap-1"><button onclick='openAbsenceSheet(${JSON.stringify(st.id).replace(/'/g,"\\'")})' class="btn-ghost rounded-lg text-amber-600 hover:bg-amber-50" title="ورقة الغياب"><i class="fa-solid fa-file-lines text-xs"></i></button><button onclick='openDetail(${JSON.stringify(st.id).replace(/'/g,"\\'")})' class="btn-ghost rounded-lg text-emerald-600 hover:bg-emerald-50" title="تفاصيل"><i class="fa-solid fa-arrow-left text-xs"></i></button></div></td></tr>`;
+        b+=`<td class="no-print"><div class="flex items-center justify-center gap-1">`;
+        
+        // Add WhatsApp button if absences > 10
+        if (ta > 10) {
+            const phone = getStudentPhone(st);
+            b+=`<button onclick="sendWhatsAppMessage('${st.id}', '${studentFullName(st).replace(/'/g, "\\'")}', ${ta}, '${phone}')" class="btn-ghost rounded-lg text-green-600 hover:bg-green-50" title="مراسلة عبر واتساب"><i class="fa-brands fa-whatsapp text-xs"></i></button>`;
+        }
+        
+        b+=`<button onclick='openAbsenceSheet(${JSON.stringify(st.id).replace(/'/g,"\\'")})' class="btn-ghost rounded-lg text-amber-600 hover:bg-amber-50" title="ورقة الغياب"><i class="fa-solid fa-file-lines text-xs"></i></button><button onclick='openDetail(${JSON.stringify(st.id).replace(/'/g,"\\'")})' class="btn-ghost rounded-lg text-emerald-600 hover:bg-emerald-50" title="تفاصيل"><i class="fa-solid fa-arrow-left text-xs"></i></button></div></td></tr>`;
     });
     const tb = document.getElementById('table-body'); if(tb) tb.innerHTML=b;
     const tf = document.getElementById('table-footer'); if(tf) tf.innerHTML=`<span>عرض <strong>${students.length}</strong> من أصل <strong>${ds.students.length}</strong> تلميذ</span><span class="text-xs text-gray-400">${isD?'عرض تفصيلي — 31 يوم':'عرض مختصر'}</span>`;
+
+    renderGuardiansTable();
 }
 
 function buildCombinedAbsenceSheet(classDatasets: any[], sid: string, sheetId: string) {
@@ -574,7 +866,9 @@ let currentCommitmentStudents: any[] = [];
 
     const listContainer = document.getElementById('whatsapp-list');
     if (listContainer) {
-        listContainer.innerHTML = studentsToNotify.map((st: any, index: number) => `
+        listContainer.innerHTML = studentsToNotify.map((st: any, index: number) => {
+            const phone = getStudentPhone(st);
+            return `
             <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col gap-3">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-3">
@@ -590,32 +884,65 @@ let currentCommitmentStudents: any[] = [];
                 <div class="flex items-center gap-2 mt-2">
                     <div class="relative flex-1">
                         <i class="fa-solid fa-phone absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
-                        <input type="tel" id="wa-phone-${st.id}" placeholder="رقم هاتف ولي الأمر (مثال: 212600000000+)" class="w-full text-sm border border-gray-200 rounded-lg pr-8 pl-3 py-2 focus:outline-none focus:border-green-400" dir="ltr">
+                        <input type="tel" id="wa-phone-${st.id}" value="${phone}" placeholder="رقم هاتف ولي الأمر (مثال: 212600000000+)" class="w-full text-sm border border-gray-200 rounded-lg pr-8 pl-3 py-2 focus:outline-none focus:border-green-400" dir="ltr">
                     </div>
                     <button onclick="sendWhatsAppMessage('${st.id}', '${studentFullName(st).replace(/'/g, "\\'")}', ${st.aggregatedAbsences})" class="btn btn-primary bg-green-600 hover:bg-green-700 border-none text-xs py-2 px-4 whitespace-nowrap">
                         <i class="fa-regular fa-paper-plane ml-1"></i> إرسال
                     </button>
                 </div>
             </div>
-        `).join('');
+        `}).join('');
     }
 
     const m = document.getElementById('whatsapp-modal');
     if (m) m.classList.add('open');
 };
 
-(window as any).sendWhatsAppMessage = (studentId: string, studentName: string, absences: number) => {
+(window as any).sendWhatsAppMessage = (studentId: string, studentName: string, absences: number, phoneOverride?: string) => {
+    let phoneStr = phoneOverride;
     const phoneInput = document.getElementById(`wa-phone-${studentId}`) as HTMLInputElement;
-    if (!phoneInput) return;
     
-    let phone = phoneInput.value.trim();
-    if (!phone) {
-        showToast('المرجو إدخال رقم الهاتف', 'error');
-        return;
+    if (phoneInput) {
+        phoneStr = phoneInput.value.trim();
+    } else if (!phoneStr) {
+        // Try to get from state if not provided
+        for (const ds of state.datasets) {
+            const st = ds.students.find((s: any) => s.id === studentId);
+            if (st) {
+                phoneStr = getStudentPhone(st);
+                break;
+            }
+        }
+    }
+    
+    if (!phoneStr) {
+        const userInput = prompt(`لم يتم العثور على رقم هاتف للتلميذ ${studentName}.\nالمرجو إدخال رقم الهاتف:`);
+        if (userInput && userInput.trim()) {
+            phoneStr = userInput.trim();
+        } else {
+            return;
+        }
+    }
+
+    // Save phone number to state if it's new or changed
+    const idLower = studentId.toLowerCase();
+    if (state.guardians[idLower] !== phoneStr) {
+        state.guardians[idLower] = phoneStr;
+        saveGuardiansToFirebase();
+    }
+
+    // Extract first valid phone number
+    let phone = '';
+    const phoneMatch = phoneStr.match(/(?:\+|00)?(?:212|0)[567]\d{8}/) || phoneStr.match(/\+?\d{9,15}/);
+    if (phoneMatch) {
+        phone = phoneMatch[0];
+    } else {
+        phone = phoneStr.replace(/[^0-9+]/g, '');
     }
 
     // Basic phone number cleaning
     phone = phone.replace(/[^0-9+]/g, '');
+    if (phone.startsWith('00')) phone = '+' + phone.substring(2);
     if (phone.startsWith('0')) {
         phone = '212' + phone.substring(1); // Assuming Morocco country code by default if starts with 0
     }
@@ -1286,6 +1613,16 @@ let confirmCallback: (() => void) | null = null;
     }
 };
 
+(window as any).openGuideModal = () => {
+    const m = document.getElementById('guide-modal');
+    if (m) m.classList.add('open');
+};
+
+(window as any).closeGuideModal = () => {
+    const m = document.getElementById('guide-modal');
+    if (m) m.classList.remove('open');
+};
+
 (window as any).closeConfirmModal = () => {
     const m = document.getElementById('confirm-modal');
     if (m) m.classList.remove('open');
@@ -1447,14 +1784,34 @@ document.getElementById('confirm-modal-yes')?.addEventListener('click', () => {
 document.addEventListener('DOMContentLoaded', () => {
     const uploadZone=document.getElementById('upload-zone');
     const fileInput=document.getElementById('file-input') as HTMLInputElement;
+    const guardianFileInput=document.getElementById('guardian-file-input') as HTMLInputElement;
     if(uploadZone && fileInput) {
         ['dragenter','dragover'].forEach(e=>uploadZone.addEventListener(e,ev=>{ev.preventDefault();uploadZone.classList.add('drag-over')}));
         ['dragleave','drop'].forEach(e=>uploadZone.addEventListener(e,ev=>{ev.preventDefault();uploadZone.classList.remove('drag-over')}));
         uploadZone.addEventListener('drop',e=>handleFiles(e.dataTransfer!.files));
         fileInput.addEventListener('change',e=>{handleFiles((e.target as HTMLInputElement).files!); (e.target as HTMLInputElement).value=''});
     }
+    if (guardianFileInput) {
+        guardianFileInput.addEventListener('change', e => {
+            handleGuardianFiles((e.target as HTMLInputElement).files!);
+            (e.target as HTMLInputElement).value = '';
+        });
+    }
 
     function handleFiles(files: FileList){Array.from(files).forEach(file=>{if(!file.name.match(/\.(xlsx|xls)$/i)){showToast(`"${file.name}" ليس Excel`,'error');return}if(file.size>MAX_FILE_SIZE){showToast(`"${file.name}" كبير جداً`,'error');return}const r=new FileReader();r.onload=e=>processExcel(e.target!.result,file.name);r.onerror=()=>showToast(`خطأ في القراءة`,'error');r.readAsArrayBuffer(file)})}
+
+    function handleGuardianFiles(files: FileList) {
+        Array.from(files).forEach(file => {
+            if (!file.name.match(/\.(xlsx|xls)$/i)) {
+                showToast(`"${file.name}" ليس Excel`, 'error');
+                return;
+            }
+            const r = new FileReader();
+            r.onload = e => processGuardianExcel(e.target!.result);
+            r.onerror = () => showToast(`خطأ في قراءة ملف أولياء الأمور`, 'error');
+            r.readAsArrayBuffer(file);
+        });
+    }
 
     document.addEventListener('keydown', e => { if (e.key === 'Escape') { (window as any).closeDetailPanel(); (window as any).closeSheetModal(); } });
     window.addEventListener('afterprint', () => { 
@@ -1493,7 +1850,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, async (user) => {
         currentUser = user;
         const btnLogin = document.getElementById('btn-login');
         const userInfo = document.getElementById('user-info');
@@ -1508,7 +1865,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (userAvatar) userAvatar.src = user.photoURL || '';
             if (authWarning) authWarning.style.display = 'none';
             
-            loadDatasetsFromFirebase();
+            await loadGuardiansFromFirebase();
+            await loadDatasetsFromFirebase();
         } else {
             if (btnLogin) btnLogin.style.display = 'inline-flex';
             if (userInfo) userInfo.style.display = 'none';
