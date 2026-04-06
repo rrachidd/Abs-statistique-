@@ -708,6 +708,116 @@ let currentCommitmentStudents: any[] = [];
     if (m) m.classList.remove('open');
 };
 
+(window as any).openParentsVisitsModal = () => {
+    const classDatasets = getActiveClassDatasets();
+    if (!classDatasets.length) {
+        showToast('لا توجد بيانات', 'error');
+        return;
+    }
+    
+    const firstDs = classDatasets[0];
+    const m = firstDs.metadata;
+    
+    let html = `
+    <div id="parents-visits-print-content" class="bg-white p-8" style="direction: rtl;">
+        <div class="text-center mb-6">
+            <h2 class="text-xl font-bold mb-2">سجل زيارات الآباء وأولياء الأمور</h2>
+            <div class="flex justify-center gap-6 text-sm font-semibold text-gray-700">
+                <span>المؤسسة: ${m.institution || '—'}</span>
+                <span>المستوى: ${m.level || '—'}</span>
+                <span>القسم: ${m.className || '—'}</span>
+                <span>الموسم الدراسي: ${m.year || '—'}</span>
+            </div>
+        </div>
+        
+        <table class="w-full border-collapse border border-gray-800 text-sm text-center">
+            <thead>
+                <tr class="bg-gray-100">
+                    <th class="border border-gray-800 p-2 w-10">الرقم</th>
+                    <th class="border border-gray-800 p-2 w-48">اسم التلميذ(ة)</th>
+                    <th class="border border-gray-800 p-2 w-28">الرقم الوطني</th>
+                    <th class="border border-gray-800 p-2 w-48">اسم الولي</th>
+                    <th class="border border-gray-800 p-2 w-40">سبب الزيارة</th>
+                    <th class="border border-gray-800 p-2 w-28">تاريخ الزيارة</th>
+                    <th class="border border-gray-800 p-2 w-24">التوقيع</th>
+                    <th class="border border-gray-800 p-2">ملاحظات</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    // We create 20 empty rows for the log
+    for (let i = 1; i <= 20; i++) {
+        html += `
+                <tr>
+                    <td class="border border-gray-800 p-2 h-10">${i}</td>
+                    <td class="border border-gray-800 p-2"></td>
+                    <td class="border border-gray-800 p-2"></td>
+                    <td class="border border-gray-800 p-2"></td>
+                    <td class="border border-gray-800 p-2"></td>
+                    <td class="border border-gray-800 p-2"></td>
+                    <td class="border border-gray-800 p-2"></td>
+                    <td class="border border-gray-800 p-2"></td>
+                </tr>
+        `;
+    }
+    
+    html += `
+            </tbody>
+        </table>
+    </div>
+    `;
+    
+    const container = document.getElementById('parents-visits-content');
+    if (container) {
+        container.innerHTML = html;
+    }
+    
+    const modal = document.getElementById('parents-visits-modal');
+    if (modal) modal.classList.add('open');
+};
+
+(window as any).closeParentsVisitsModal = () => {
+    const modal = document.getElementById('parents-visits-modal');
+    if (modal) modal.classList.remove('open');
+};
+
+(window as any).executePrintParentsVisits = () => {
+    const content = document.getElementById('parents-visits-print-content');
+    if (content) {
+        const pa = document.getElementById('print-area');
+        if (!pa) return;
+        pa.innerHTML = content.outerHTML;
+        pa.style.display = 'block';
+        (window as any).setPrintOrientation('landscape');
+        (window as any).closeParentsVisitsModal();
+        setTimeout(() => window.print(), 500);
+    }
+};
+
+(window as any).downloadParentsVisitsPDF = async () => {
+    const content = document.getElementById('parents-visits-print-content');
+    if (!content) return;
+    
+    showToast('جارٍ إنشاء ملف PDF (قد يستغرق بعض الوقت)...', 'info', 10000);
+    
+    try {
+        const opt = {
+            margin: 10,
+            filename: `سجل_زيارات_الآباء.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+        };
+        
+        await (window as any).html2pdf().set(opt).from(content).save();
+        showToast('تم تحميل الملف بنجاح', 'success');
+    } catch (error) {
+        console.error(error);
+        showToast('حدث خطأ أثناء إنشاء ملف PDF', 'error');
+    }
+};
+
 (window as any).printCommitments = () => {
     const classDatasets = getActiveClassDatasets();
     if (!classDatasets.length) {
