@@ -19,8 +19,8 @@ function translateMonth(m: any){return(!m)?'غير محدد':(MONTH_NAMES[m.toLo
 function getSchoolDays(students: any[]){const d=new Set();students.forEach(st=>{for(let i=1;i<=31;i++){if(st.days[i]!==undefined&&parseDayValue(st.days[i]).type!=='none')d.add(i)}});return d}
 function calcTotalAbsences(st: any){let t=0;for(let d=1;d<=31;d++){const i=parseDayValue(st.days[d]);if(i.type==='absent')t+=i.val}return t}
 function calcAbsentDays(st: any){let c=0;for(let d=1;d<=31;d++){if(parseDayValue(st.days[d]).type==='absent')c++}return c}
-function getUnjustified(st: any){return parseInt(st.summaries[0])||0}
-function getJustified(st: any){return parseInt(st.summaries[1])||0}
+function getJustified(st: any){if(!st.summaries||st.summaries.length===0)return 0;const d=parseInt(st.summaries[1])||0;const h=parseInt(st.summaries[3])||0;const total=calcTotalAbsences(st);return Math.min((d*4)+h, total)}
+function getUnjustified(st: any){const total=calcTotalAbsences(st);const just=getJustified(st);return Math.max(0,total-just)}
 function studentFullName(st: any){return`${st.family} ${st.name}`}
 function getClassKey(ds: any){return ds.metadata.class||'غير محدد'}
 function extractAfter(text: string,keyword: string){const idx=text.indexOf(keyword);if(idx===-1)return'';let rest=text.substring(idx+keyword.length).replace(/[:\s]+/,' ').trim();['المديرية','نيابة','عمالة','السنة الدراسية','المستوى','القسم','الشهر','غير مبرر','مبرر'].forEach(nk=>{const ni=rest.indexOf(nk);if(ni>0)rest=rest.substring(0,ni).trim()});return rest.replace(/[*\|]/g,'').trim()}
@@ -39,7 +39,41 @@ function getDatasetId(ds: any) {
 
 function showToast(msg: string,type='info',dur=3500){const c=document.getElementById('toast-container');if(!c)return;const icons: any={success:'fa-circle-check',error:'fa-circle-xmark',info:'fa-circle-info'};const t=document.createElement('div');t.className=`toast toast-${type}`;t.innerHTML=`<i class="fa-solid ${icons[type]||icons.info}"></i><span>${msg}</span>`;c.appendChild(t);setTimeout(()=>{t.classList.add('removing');setTimeout(()=>t.remove(),400)},dur)}
 
+function saveDataLocally() {
+    try {
+        localStorage.setItem('absence_datasets', JSON.stringify(state.datasets));
+        localStorage.setItem('absence_guardians', JSON.stringify(state.guardians));
+        localStorage.setItem('absence_guardianDetails', JSON.stringify(state.guardianDetails));
+    } catch (e) {
+        console.error("Local storage error", e);
+    }
+}
+
+function loadDataLocally() {
+    try {
+        const ds = localStorage.getItem('absence_datasets');
+        const gd = localStorage.getItem('absence_guardians');
+        const gdd = localStorage.getItem('absence_guardianDetails');
+        if (ds) state.datasets = JSON.parse(ds);
+        if (gd) state.guardians = JSON.parse(gd);
+        if (gdd) state.guardianDetails = JSON.parse(gdd);
+        
+        if (state.datasets.length > 0) {
+            if (!state.activeClass || !state.datasets.find((d: any)=>getClassKey(d)===state.activeClass)) {
+                state.activeClass = getClassKey(state.datasets[0]);
+            }
+            const cm = getClassMonths(state.activeClass);
+            if (!cm.find((d: any)=>d.metadata.month===state.activeMonth)) {
+                state.activeMonth = cm.length ? cm[0].metadata.month : null;
+            }
+        }
+    } catch (e) {
+        console.error("Local storage load error", e);
+    }
+}
+
 async function saveDatasetToFirebase(dataset: any) {
+    saveDataLocally();
     if (!currentUser) return;
     try {
         const datasetId = getDatasetId(dataset);
@@ -60,6 +94,7 @@ async function saveDatasetToFirebase(dataset: any) {
 }
 
 async function saveGuardiansToFirebase() {
+    saveDataLocally();
     if (!currentUser) return;
     try {
         const docRef = doc(db, `users/${currentUser.uid}/settings`, 'guardians');
@@ -746,9 +781,46 @@ let currentCommitmentStudents: any[] = [];
             <tbody>
     `;
     
-    // We create 20 empty rows for the log
-    for (let i = 1; i <= 20; i++) {
-        html += `
+    // Aggregate absences across all months
+    const studentAbsences = new Map<string, { student: any, totalAbsences: number }>();
+    
+    classDatasets.forEach((ds: any) => {
+        ds.students.forEach((st: any) => {
+            const absences = calcTotalAbsences(st);
+            if (studentAbsences.has(st.id)) {
+                studentAbsences.get(st.id)!.totalAbsences += absences;
+            } else {
+                studentAbsences.set(st.id, { student: st, totalAbsences: absences });
+            }
+        });
+    });
+
+    // Filter students with more than 10 hours of absence across all months
+    const exceededStudents = Array.from(studentAbsences.values())
+        .filter(item => item.totalAbsences > 10)
+        .map(item => ({ ...item.student, aggregatedAbsences: item.totalAbsences }));
+
+    const totalRows = Math.max(20, exceededStudents.length);
+
+    for (let i = 1; i <= totalRows; i++) {
+        const st = exceededStudents[i - 1];
+        if (st) {
+            const gd = state.guardianDetails[st.id] || {};
+            const guardianName = gd.guardian || gd.father || gd.mother || '';
+            html += `
+                <tr>
+                    <td class="border border-gray-800 p-2 h-10">${i}</td>
+                    <td class="border border-gray-800 p-2">${studentFullName(st)}</td>
+                    <td class="border border-gray-800 p-2">${st.id || ''}</td>
+                    <td class="border border-gray-800 p-2">${guardianName}</td>
+                    <td class="border border-gray-800 p-2">تجاوز الغياب المسموح (${st.aggregatedAbsences} س)</td>
+                    <td class="border border-gray-800 p-2"></td>
+                    <td class="border border-gray-800 p-2"></td>
+                    <td class="border border-gray-800 p-2"></td>
+                </tr>
+            `;
+        } else {
+            html += `
                 <tr>
                     <td class="border border-gray-800 p-2 h-10">${i}</td>
                     <td class="border border-gray-800 p-2"></td>
@@ -759,7 +831,8 @@ let currentCommitmentStudents: any[] = [];
                     <td class="border border-gray-800 p-2"></td>
                     <td class="border border-gray-800 p-2"></td>
                 </tr>
-        `;
+            `;
+        }
     }
     
     html += `
@@ -1390,13 +1463,205 @@ let currentSummaryHtml = '';
     }
 };
 
-(window as any).generateClassInvestment = async () => {
+(window as any).generateClassInvestment = () => {
     const classDatasets = getActiveClassDatasets();
     if (!classDatasets.length) {
         showToast('لا يوجد بيانات لهذا القسم', 'error');
         return;
     }
-    await generateAIReport('investment', classDatasets);
+    
+    const m = document.getElementById('ai-modal');
+    if (m) m.classList.add('open');
+    
+    const titleEl = document.getElementById('ai-modal-title');
+    const subtitleEl = document.getElementById('ai-modal-subtitle');
+    const loadingEl = document.getElementById('ai-loading');
+    const contentEl = document.getElementById('ai-content');
+    
+    if (titleEl) titleEl.innerText = 'استثمار غيابات القسم';
+    if (subtitleEl) subtitleEl.innerText = state.activeClass || '';
+    if (loadingEl) loadingEl.style.display = 'none';
+    
+    const firstDs = classDatasets[0];
+    const meta = firstDs.metadata;
+    
+    // Aggregate data
+    let totalAbsences = 0;
+    let unjustifiedAbsences = 0;
+    let justifiedAbsences = 0;
+    
+    const studentAbsences = new Map<string, { student: any, total: number, unj: number, just: number }>();
+    
+    classDatasets.forEach((ds: any) => {
+        ds.students.forEach((st: any) => {
+            const abs = calcTotalAbsences(st);
+            const unj = getUnjustified(st);
+            const just = getJustified(st);
+            
+            totalAbsences += abs;
+            unjustifiedAbsences += unj;
+            justifiedAbsences += just;
+            
+            if (studentAbsences.has(st.id)) {
+                const s = studentAbsences.get(st.id)!;
+                s.total += abs;
+                s.unj += unj;
+                s.just += just;
+            } else {
+                studentAbsences.set(st.id, { student: st, total: abs, unj: unj, just: just });
+            }
+        });
+    });
+    
+    const studentsList = Array.from(studentAbsences.values());
+    const totalStudents = studentsList.length;
+    
+    // Sort by total absences
+    studentsList.sort((a, b) => b.total - a.total);
+    
+    const topAbsentees = studentsList.slice(0, 10).filter(s => s.total > 0);
+    
+    // Distribution
+    let zeroAbs = 0, lowAbs = 0, medAbs = 0, highAbs = 0;
+    studentsList.forEach(s => {
+        if (s.total === 0) zeroAbs++;
+        else if (s.total <= 5) lowAbs++;
+        else if (s.total <= 10) medAbs++;
+        else highAbs++;
+    });
+    
+    let html = `
+    <div class="p-6 bg-white text-gray-800" style="direction: rtl; font-family: 'Cairo', sans-serif;">
+        <div class="text-center mb-8 border-b pb-4">
+            <h2 class="text-2xl font-bold mb-2">استثمار غيابات القسم</h2>
+            <div class="flex justify-center gap-6 text-sm font-semibold text-gray-600">
+                <span>المؤسسة: ${meta.institution || '—'}</span>
+                <span>المستوى: ${meta.level || '—'}</span>
+                <span>القسم: ${meta.className || '—'}</span>
+                <span>الموسم الدراسي: ${meta.year || '—'}</span>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-blue-50 p-4 rounded-xl text-center border border-blue-100">
+                <p class="text-xs text-blue-600 font-bold mb-1">عدد التلاميذ</p>
+                <p class="text-2xl font-black text-blue-800">${totalStudents}</p>
+            </div>
+            <div class="bg-red-50 p-4 rounded-xl text-center border border-red-100">
+                <p class="text-xs text-red-600 font-bold mb-1">مجموع الغيابات</p>
+                <p class="text-2xl font-black text-red-800">${totalAbsences}</p>
+            </div>
+            <div class="bg-orange-50 p-4 rounded-xl text-center border border-orange-100">
+                <p class="text-xs text-orange-600 font-bold mb-1">غياب غير مبرر</p>
+                <p class="text-2xl font-black text-orange-800">${unjustifiedAbsences}</p>
+            </div>
+            <div class="bg-emerald-50 p-4 rounded-xl text-center border border-emerald-100">
+                <p class="text-xs text-emerald-600 font-bold mb-1">غياب مبرر</p>
+                <p class="text-2xl font-black text-emerald-800">${justifiedAbsences}</p>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <div>
+                <h3 class="text-lg font-bold mb-4 border-b pb-2 text-gray-700">توزيع الغيابات</h3>
+                <table class="w-full text-sm border-collapse border border-gray-200 text-center">
+                    <thead>
+                        <tr class="bg-gray-100">
+                            <th class="border border-gray-200 p-2">الفئة</th>
+                            <th class="border border-gray-200 p-2">عدد التلاميذ</th>
+                            <th class="border border-gray-200 p-2">النسبة</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="border border-gray-200 p-2 font-semibold text-emerald-600">0 غياب (مواظبون)</td>
+                            <td class="border border-gray-200 p-2">${zeroAbs}</td>
+                            <td class="border border-gray-200 p-2">${((zeroAbs/totalStudents)*100).toFixed(1)}%</td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-200 p-2 font-semibold text-blue-600">1 - 5 غيابات</td>
+                            <td class="border border-gray-200 p-2">${lowAbs}</td>
+                            <td class="border border-gray-200 p-2">${((lowAbs/totalStudents)*100).toFixed(1)}%</td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-200 p-2 font-semibold text-orange-600">6 - 10 غيابات</td>
+                            <td class="border border-gray-200 p-2">${medAbs}</td>
+                            <td class="border border-gray-200 p-2">${((medAbs/totalStudents)*100).toFixed(1)}%</td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-200 p-2 font-semibold text-red-600">أكثر من 10 غيابات</td>
+                            <td class="border border-gray-200 p-2">${highAbs}</td>
+                            <td class="border border-gray-200 p-2">${((highAbs/totalStudents)*100).toFixed(1)}%</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div>
+                <h3 class="text-lg font-bold mb-4 border-b pb-2 text-gray-700">أكثر التلاميذ غياباً</h3>
+                <table class="w-full text-sm border-collapse border border-gray-200 text-center">
+                    <thead>
+                        <tr class="bg-gray-100">
+                            <th class="border border-gray-200 p-2">اسم التلميذ</th>
+                            <th class="border border-gray-200 p-2">المجموع</th>
+                            <th class="border border-gray-200 p-2">غير مبرر</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${topAbsentees.length > 0 ? topAbsentees.map(s => `
+                        <tr>
+                            <td class="border border-gray-200 p-2 font-bold text-gray-700">${studentFullName(s.student)}</td>
+                            <td class="border border-gray-200 p-2 text-red-600 font-bold">${s.total}</td>
+                            <td class="border border-gray-200 p-2 text-orange-600">${s.unj}</td>
+                        </tr>
+                        `).join('') : `<tr><td colspan="3" class="border border-gray-200 p-4 text-gray-500">لا توجد غيابات مسجلة</td></tr>`}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        ${classDatasets.length > 1 ? `
+        <div class="mb-8">
+            <h3 class="text-lg font-bold mb-4 border-b pb-2 text-gray-700">تطور الغيابات حسب الأشهر</h3>
+            <table class="w-full text-sm border-collapse border border-gray-200 text-center">
+                <thead>
+                    <tr class="bg-gray-100">
+                        <th class="border border-gray-200 p-2">الشهر</th>
+                        <th class="border border-gray-200 p-2">مجموع الغيابات</th>
+                        <th class="border border-gray-200 p-2">غير مبرر</th>
+                        <th class="border border-gray-200 p-2">متوسط الغياب للتلميذ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${classDatasets.map((ds: any) => {
+                        let mTotal = 0;
+                        let mUnj = 0;
+                        ds.students.forEach((st: any) => {
+                            mTotal += calcTotalAbsences(st);
+                            mUnj += getUnjustified(st);
+                        });
+                        return `
+                        <tr>
+                            <td class="border border-gray-200 p-2 font-bold">${ds.metadata.monthAr}</td>
+                            <td class="border border-gray-200 p-2 text-red-600 font-bold">${mTotal}</td>
+                            <td class="border border-gray-200 p-2 text-orange-600">${mUnj}</td>
+                            <td class="border border-gray-200 p-2">${(mTotal / ds.students.length).toFixed(2)}</td>
+                        </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>
+        ` : ''}
+        
+        <div class="mt-12 pt-8 border-t border-gray-200 flex justify-between text-sm font-bold text-gray-700">
+            <div>توقيع الحارس العام:</div>
+            <div>توقيع السيد المدير:</div>
+        </div>
+    </div>
+    `;
+    
+    if (contentEl) contentEl.innerHTML = html;
 };
 
 let compareChartInstance: any = null;
@@ -1533,61 +1798,201 @@ let compareChartInstance: any = null;
     }
 };
 
-(window as any).generateCompareAI = async () => {
+(window as any).generateCompareAI = () => {
     const data = (window as any).currentComparisonData;
     if (!data || data.length === 0) return;
 
-    const loadingEl = document.getElementById('compare-ai-loading');
     const contentEl = document.getElementById('compare-ai-content');
     const btnAi = document.getElementById('btn-generate-compare-ai');
     
-    if (loadingEl) loadingEl.style.display = 'flex';
     if (contentEl) contentEl.innerHTML = '';
     if (btnAi) btnAi.style.display = 'none';
 
-    try {
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) throw new Error("GEMINI_API_KEY is missing");
-        const ai = new GoogleGenAI({ apiKey });
+    // Sort data
+    const sortedByTotal = [...data].sort((a, b) => b.totalAbsences - a.totalAbsences);
+    const sortedByAvg = [...data].sort((a, b) => parseFloat(b.avgAbsence) - parseFloat(a.avgAbsence));
+    
+    const mostAbsentClass = sortedByAvg[0];
+    const leastAbsentClass = sortedByAvg[sortedByAvg.length - 1];
+    
+    const totalAbsencesAll = data.reduce((sum: number, c: any) => sum + c.totalAbsences, 0);
+    const totalUnjustifiedAll = data.reduce((sum: number, c: any) => sum + c.unjustified, 0);
+    const totalStudentsAll = data.reduce((sum: number, c: any) => sum + c.studentCount, 0);
+    
+    const overallAvg = totalStudentsAll > 0 ? (totalAbsencesAll / totalStudentsAll).toFixed(2) : '0';
+    const unjustifiedRate = totalAbsencesAll > 0 ? ((totalUnjustifiedAll / totalAbsencesAll) * 100).toFixed(1) : '0';
 
-        let prompt = `أنت خبير تربوي ومحلل بيانات مدرسية.
-إليك بيانات مقارنة الغياب بين عدة أقسام في المؤسسة:
+    let html = `
+    <div class="p-4 bg-gray-50 rounded-xl border border-gray-200 mt-4 text-gray-800" style="direction: rtl; font-family: 'Cairo', sans-serif;">
+        <div class="space-y-4 text-sm leading-relaxed text-justify">
+            <p>
+                بناءً على المعطيات الإحصائية للأقسام المقارنة، يتبين أن مجموع الغيابات بلغ <strong>${totalAbsencesAll}</strong> وحدة زمنية، 
+                منها <strong>${totalUnjustifiedAll}</strong> غياباً غير مبرر (بنسبة <strong>${unjustifiedRate}%</strong>). 
+                ويبلغ المعدل العام للغياب <strong>${overallAvg}</strong> وحدة لكل تلميذ.
+            </p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                <div class="bg-red-50 p-3 rounded-lg border border-red-100">
+                    <h4 class="font-bold text-red-800 mb-1"><i class="fa-solid fa-arrow-trend-up ml-1"></i>الأقسام الأكثر تغيباً</h4>
+                    <p>سجل قسم <strong>${mostAbsentClass.className}</strong> أعلى معدل غياب بمتوسط <strong>${mostAbsentClass.avgAbsence}</strong> وحدة لكل تلميذ (مجموع: ${mostAbsentClass.totalAbsences} غياب). يتطلب هذا القسم تدخلاً تربوياً عاجلاً لمعرفة أسباب هذه الظاهرة.</p>
+                </div>
+                
+                <div class="bg-emerald-50 p-3 rounded-lg border border-emerald-100">
+                    <h4 class="font-bold text-emerald-800 mb-1"><i class="fa-solid fa-arrow-trend-down ml-1"></i>الأقسام الأكثر انضباطاً</h4>
+                    <p>يعتبر قسم <strong>${leastAbsentClass.className}</strong> الأكثر انضباطاً بمعدل غياب بلغ <strong>${leastAbsentClass.avgAbsence}</strong> وحدة لكل تلميذ (مجموع: ${leastAbsentClass.totalAbsences} غياب). يُنصح بتثمين هذا الانضباط وتشجيع تلاميذ القسم.</p>
+                </div>
+            </div>
+            
+            <div class="mt-4">
+                <h4 class="font-bold text-gray-800 mb-2"><i class="fa-solid fa-lightbulb text-amber-500 ml-1"></i>توصيات عامة:</h4>
+                <ul class="list-disc list-inside space-y-1 text-gray-700">
+                    <li>تكثيف التواصل مع أولياء أمور تلاميذ الأقسام التي تتصدر لائحة الغياب.</li>
+                    <li>التركيز على تقليص نسبة الغياب غير المبرر (${unjustifiedRate}%) من خلال التفعيل الصارم للمذكرات المنظمة.</li>
+                    <li>إشراك السادة الأساتذة والموجه التربوي في دراسة أسباب العزوف عن الحضور في الأقسام المتعثرة.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    `;
 
-`;
-        data.forEach((c: any) => {
-            prompt += `- القسم: ${c.className} | عدد التلاميذ: ${c.studentCount} | مجموع الغيابات: ${c.totalAbsences} | الغيابات غير المبررة: ${c.unjustified} | متوسط الغياب للتلميذ: ${c.avgAbsence}\n`;
-        });
-
-        prompt += `\nالمطلوب:
-كتابة استنتاجات تحليلية دقيقة تقارن بين هذه الأقسام.
-1. تحديد الأقسام التي تعاني من أكبر نسبة غياب وتلك الأكثر انضباطاً.
-2. تحليل العلاقة بين الغيابات المبررة وغير المبررة في الأقسام.
-3. تقديم توصيات عامة للإدارة للتعامل مع الأقسام الأكثر تغيباً.
-يجب أن يكون الرد باللغة العربية، منسقاً باستخدام Markdown، ومهنياً.`;
-
-        const response = await ai.models.generateContent({
-            model: "gemini-3.1-pro-preview",
-            contents: prompt,
-        });
-
-        if (loadingEl) loadingEl.style.display = 'none';
-        if (contentEl) contentEl.innerHTML = await marked.parse(response.text || '');
-
-    } catch (error) {
-        console.error(error);
-        if (loadingEl) loadingEl.style.display = 'none';
-        if (btnAi) btnAi.style.display = 'inline-block';
-        if (contentEl) contentEl.innerHTML = `<div class="text-red-500 text-center py-4"><i class="fa-solid fa-triangle-exclamation text-2xl mb-2"></i><br>حدث خطأ أثناء الاتصال بالذكاء الاصطناعي.<br><span class="text-xs text-gray-500 mt-4 block" style="direction: ltr; text-align: left;">${error instanceof Error ? error.message : String(error)}</span></div>`;
-    }
+    if (contentEl) contentEl.innerHTML = html;
 };
 
-(window as any).generateAbsenceReport = async () => {
+(window as any).generateAbsenceReport = () => {
     const classDatasets = getActiveClassDatasets();
     if (!classDatasets.length) {
         showToast('لا يوجد بيانات لهذا القسم', 'error');
         return;
     }
-    await generateAIReport('report', classDatasets);
+    
+    const m = document.getElementById('ai-modal');
+    if (m) m.classList.add('open');
+    
+    const titleEl = document.getElementById('ai-modal-title');
+    const subtitleEl = document.getElementById('ai-modal-subtitle');
+    const loadingEl = document.getElementById('ai-loading');
+    const contentEl = document.getElementById('ai-content');
+    
+    if (titleEl) titleEl.innerText = 'تقرير مفصل حول ظاهرة الغياب';
+    if (subtitleEl) subtitleEl.innerText = state.activeClass || '';
+    if (loadingEl) loadingEl.style.display = 'none';
+    
+    const firstDs = classDatasets[0];
+    const meta = firstDs.metadata;
+    
+    // Aggregate data
+    let totalAbsences = 0;
+    let unjustifiedAbsences = 0;
+    
+    const studentAbsences = new Map<string, { student: any, total: number, unj: number }>();
+    
+    classDatasets.forEach((ds: any) => {
+        ds.students.forEach((st: any) => {
+            const abs = calcTotalAbsences(st);
+            const unj = getUnjustified(st);
+            
+            totalAbsences += abs;
+            unjustifiedAbsences += unj;
+            
+            if (studentAbsences.has(st.id)) {
+                const s = studentAbsences.get(st.id)!;
+                s.total += abs;
+                s.unj += unj;
+            } else {
+                studentAbsences.set(st.id, { student: st, total: abs, unj: unj });
+            }
+        });
+    });
+    
+    const studentsList = Array.from(studentAbsences.values());
+    const totalStudents = studentsList.length;
+    
+    // Sort by total absences
+    studentsList.sort((a, b) => b.total - a.total);
+    
+    const topAbsentees = studentsList.slice(0, 5).filter(s => s.total > 0);
+    
+    const absenceRate = totalStudents > 0 ? (totalAbsences / totalStudents).toFixed(2) : '0';
+    const unjustifiedRate = totalAbsences > 0 ? ((unjustifiedAbsences / totalAbsences) * 100).toFixed(1) : '0';
+    
+    let html = `
+    <div class="p-6 bg-white text-gray-800" style="direction: rtl; font-family: 'Cairo', sans-serif;">
+        <div class="text-center mb-8 border-b pb-4">
+            <h2 class="text-2xl font-bold mb-2">تقرير مفصل حول ظاهرة الغياب وسبل العلاج</h2>
+            <div class="flex justify-center gap-6 text-sm font-semibold text-gray-600">
+                <span>المؤسسة: ${meta.institution || '—'}</span>
+                <span>المستوى: ${meta.level || '—'}</span>
+                <span>القسم: ${meta.className || '—'}</span>
+                <span>الموسم الدراسي: ${meta.year || '—'}</span>
+            </div>
+        </div>
+        
+        <div class="mb-8">
+            <h3 class="text-lg font-bold mb-3 text-indigo-700 border-b border-indigo-100 pb-2"><i class="fa-solid fa-magnifying-glass-chart ml-2"></i>1. تشخيص الظاهرة بناءً على الأرقام</h3>
+            <p class="mb-4 text-justify leading-relaxed">
+                من خلال تحليل بيانات الغياب للقسم <strong>${meta.className || '—'}</strong>، يتبين أن مجموع الغيابات المسجلة بلغ <strong>${totalAbsences}</strong> وحدة زمنية، 
+                منها <strong>${unjustifiedAbsences}</strong> غياباً غير مبرر، وهو ما يمثل نسبة <strong>${unjustifiedRate}%</strong> من إجمالي الغيابات. 
+                ويبلغ متوسط الغياب لكل تلميذ حوالي <strong>${absenceRate}</strong> وحدة زمنية.
+            </p>
+            ${topAbsentees.length > 0 ? `
+            <p class="mb-2 font-semibold">التلاميذ الأكثر تغيباً والذين يحتاجون تدخلاً عاجلاً:</p>
+            <ul class="list-disc list-inside mb-4 text-gray-700 bg-gray-50 p-4 rounded-lg">
+                ${topAbsentees.map(s => `<li><strong>${studentFullName(s.student)}</strong>: ${s.total} غياب (منها ${s.unj} غير مبرر).</li>`).join('')}
+            </ul>
+            ` : '<p class="text-emerald-600 font-semibold mb-4">لا توجد غيابات مسجلة في هذا القسم، مما يدل على انضباط ممتاز.</p>'}
+        </div>
+        
+        <div class="mb-8">
+            <h3 class="text-lg font-bold mb-3 text-orange-700 border-b border-orange-100 pb-2"><i class="fa-solid fa-circle-question ml-2"></i>2. الأسباب المحتملة للغياب</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-orange-50 p-4 rounded-lg border border-orange-100">
+                    <h4 class="font-bold text-orange-800 mb-2">أسباب تربوية</h4>
+                    <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
+                        <li>صعوبة مسايرة الإيقاع الدراسي.</li>
+                        <li>ضعف التوجيه والمواكبة.</li>
+                        <li>الخوف من التقويمات والامتحانات.</li>
+                        <li>عدم إنجاز الواجبات المدرسية.</li>
+                    </ul>
+                </div>
+                <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                    <h4 class="font-bold text-blue-800 mb-2">أسباب اجتماعية وأسرية</h4>
+                    <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
+                        <li>ضعف المراقبة الأسرية.</li>
+                        <li>مشاكل عائلية أو اجتماعية.</li>
+                        <li>بعد السكن عن المؤسسة.</li>
+                        <li>تأثير أصدقاء السوء.</li>
+                    </ul>
+                </div>
+                <div class="bg-purple-50 p-4 rounded-lg border border-purple-100">
+                    <h4 class="font-bold text-purple-800 mb-2">أسباب نفسية وصحية</h4>
+                    <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
+                        <li>أمراض موسمية أو مزمنة.</li>
+                        <li>ضعف الثقة بالنفس.</li>
+                        <li>صعوبات في الاندماج مع الزملاء.</li>
+                        <li>الشعور بالإحباط أو غياب الدافعية.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mb-8">
+            <h3 class="text-lg font-bold mb-3 text-emerald-700 border-b border-emerald-100 pb-2"><i class="fa-solid fa-hand-holding-medical ml-2"></i>3. سبل العلاج والتدخلات المقترحة</h3>
+            <div class="space-y-3 text-gray-700 text-justify leading-relaxed">
+                <p><strong><i class="fa-solid fa-user-tie text-emerald-600 ml-1"></i> دور الإدارة التربوية:</strong> التفعيل الصارم لمقتضيات النظام الداخلي للمؤسسة، استدعاء أولياء أمور التلاميذ الأكثر تغيباً (المذكورين أعلاه) لتوقيع التزامات، وتفعيل مجالس الأقسام لدراسة الحالات المستعصية.</p>
+                <p><strong><i class="fa-solid fa-chalkboard-user text-emerald-600 ml-1"></i> دور الأساتذة:</strong> تحفيز التلاميذ، تنويع طرق التدريس لتفادي الملل، رصد الحالات التي تعاني من صعوبات التعلم وإحالتها على الدعم، والتواصل المستمر مع الإدارة بخصوص المتغيبين.</p>
+                <p><strong><i class="fa-solid fa-house-chimney-user text-emerald-600 ml-1"></i> دور الأسرة:</strong> ضرورة تتبع مواظبة الأبناء، التواصل المستمر مع إدارة المؤسسة، تبرير الغيابات في آجالها القانونية، وتوفير الجو المناسب للتحصيل بالمنزل.</p>
+                <p><strong><i class="fa-solid fa-user-doctor text-emerald-600 ml-1"></i> دور الموجه التربوي:</strong> برمجة جلسات استماع وتوجيه للتلاميذ الذين يعانون من تعثرات دراسية أو نفسية، ومساعدتهم على بناء مشروع شخصي يعزز دافعيتهم للتعلم.</p>
+            </div>
+        </div>
+        
+        <div class="mt-12 pt-8 border-t border-gray-200 flex justify-between text-sm font-bold text-gray-700">
+            <div>توقيع الحارس العام:</div>
+            <div>توقيع السيد المدير:</div>
+        </div>
+    </div>
+    `;
+    
+    if (contentEl) contentEl.innerHTML = html;
 };
 
 (window as any).closeAiModal = () => {
@@ -1599,92 +2004,38 @@ let compareChartInstance: any = null;
     const content = document.getElementById('ai-content')?.innerHTML || '';
     const pa = document.getElementById('sheet-print-area');
     if (pa) {
-        pa.innerHTML = `<div style="padding: 20px; font-family: Arial, sans-serif; direction: rtl;" class="markdown-body">${content}</div>`;
+        pa.innerHTML = `<div style="padding: 20px; font-family: 'Cairo', sans-serif; direction: rtl;">${content}</div>`;
         pa.style.display = 'block';
         (window as any).setPrintOrientation('portrait');
         setTimeout(() => window.print(), 500);
     }
 };
 
-async function generateAIReport(type: 'investment' | 'report', datasets: any[]) {
-    const m = document.getElementById('ai-modal');
-    if (m) m.classList.add('open');
-    
-    const titleEl = document.getElementById('ai-modal-title');
-    const subtitleEl = document.getElementById('ai-modal-subtitle');
-    const loadingEl = document.getElementById('ai-loading');
-    const contentEl = document.getElementById('ai-content');
-    
-    if (titleEl) titleEl.innerText = type === 'investment' ? 'استثمار غيابات القسم' : 'تقرير مفصل حول ظاهرة الغياب';
-    if (subtitleEl) subtitleEl.innerText = state.activeClass || '';
-    if (loadingEl) loadingEl.style.display = 'flex';
-    if (contentEl) contentEl.innerHTML = '';
-    
-    try {
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-            throw new Error("GEMINI_API_KEY is missing");
-        }
-        const ai = new GoogleGenAI({ apiKey });
-        
-        const firstDs = datasets[0];
-        const meta = firstDs.metadata;
-        
-        let prompt = `أنت خبير تربوي ومستشار في التوجيه المدرسي.
-بناءً على بيانات الغياب التالية للقسم "${meta.class}" (المستوى: ${meta.level}) بالمؤسسة "${meta.institution}":
-
-`;
-        
-        datasets.forEach(ds => {
-            prompt += `\n--- شهر ${ds.metadata.monthAr} ---\n`;
-            let totalAbsences = 0;
-            let unjustifiedAbsences = 0;
-            let topAbsentees: any[] = [];
-            ds.students.forEach((st: any) => {
-                const abs = calcTotalAbsences(st);
-                const unj = getUnjustified(st);
-                totalAbsences += abs;
-                unjustifiedAbsences += unj;
-                if (abs > 0) {
-                    topAbsentees.push({ name: `${st.family} ${st.name}`, abs, unj });
-                }
-            });
-            topAbsentees.sort((a, b) => b.abs - a.abs);
-            prompt += `مجموع الغيابات: ${totalAbsences} وحدة زمنية (منها ${unjustifiedAbsences} غير مبررة).\n`;
-            prompt += `أكثر التلاميذ غياباً:\n`;
-            topAbsentees.slice(0, 8).forEach(t => {
-                prompt += `- ${t.name}: ${t.abs} غياب (منها ${t.unj} غير مبرر)\n`;
-            });
-        });
-        
-        if (type === 'investment') {
-            prompt += `\n\nالمطلوب:
-كتابة "استثمار لغيابات هذا القسم" (تحليل إحصائي وتربوي للبيانات، استنتاجات حول وتيرة الغياب، ومقارنة بين الأشهر إن وجدت).
-يجب أن يكون التقرير باللغة العربية، منسقاً بشكل جيد باستخدام Markdown، ومهنياً يوجه للإدارة التربوية.`;
-        } else {
-            prompt += `\n\nالمطلوب:
-كتابة "تقرير مفصل حول ظاهرة الغياب لهذا القسم وسبل العلاج".
-يجب أن يتضمن التقرير:
-1. تشخيص الظاهرة في هذا القسم بناءً على الأرقام.
-2. الأسباب المحتملة (تربوية، اجتماعية، نفسية...).
-3. سبل العلاج والتدخلات المقترحة (دور الإدارة، الأساتذة، الأسرة، والموجه التربوي).
-يجب أن يكون التقرير باللغة العربية، منسقاً بشكل جيد باستخدام Markdown، ومهنياً.`;
-        }
-        
-        const response = await ai.models.generateContent({
-            model: "gemini-3.1-pro-preview",
-            contents: prompt,
-        });
-        
-        if (loadingEl) loadingEl.style.display = 'none';
-        if (contentEl) contentEl.innerHTML = await marked.parse(response.text || '');
-        
-    } catch (error) {
-        console.error(error);
-        if (loadingEl) loadingEl.style.display = 'none';
-        if (contentEl) contentEl.innerHTML = `<div class="text-red-500 text-center py-8"><i class="fa-solid fa-triangle-exclamation text-4xl mb-3"></i><br>حدث خطأ أثناء الاتصال بالذكاء الاصطناعي. يرجى المحاولة لاحقاً.<br><span class="text-xs text-gray-500 mt-4 block" style="direction: ltr; text-align: left;">${error instanceof Error ? error.message : String(error)}</span></div>`;
+(window as any).promptForApiKey = () => {
+    const key = prompt('الرجاء إدخال مفتاح API الخاص بك (Kimi أو OpenAI):');
+    if (key && key.trim() !== '') {
+        localStorage.setItem('custom_ai_api_key', key.trim());
+        showToast('تم حفظ المفتاح بنجاح. يرجى إعادة المحاولة.', 'success');
+        // Close modal or retry
+        const modal = document.getElementById('ai-modal');
+        if (modal) modal.classList.remove('active');
+        const compareModal = document.getElementById('compare-modal');
+        if (compareModal) compareModal.classList.remove('active');
     }
-}
+};
+
+(window as any).selectApiKeyAndRetryReport = async () => {
+    if ((window as any).aistudio) {
+        try {
+            await (window as any).aistudio.openSelectKey();
+            (window as any).generateAbsenceReport();
+        } catch (e) {
+            console.error('Failed to select API key', e);
+        }
+    } else {
+        showToast('ميزة اختيار المفتاح غير متوفرة في هذه البيئة', 'error');
+    }
+};
 
 (window as any).printReport = () => {
     const ds = getActiveDataset(); if (!ds) return; buildPrintArea(ds, null); 
@@ -1781,6 +2132,7 @@ document.getElementById('confirm-modal-yes')?.addEventListener('click', () => {
         
         [barChart, lineChart, pieChart, hBarChart].forEach(c => { if (c) { c.destroy(); c = null; } });
         
+        saveDataLocally();
         renderAll();
         showToast('تم حذف القسم بنجاح', 'success');
     });
@@ -1801,6 +2153,7 @@ document.getElementById('confirm-modal-yes')?.addEventListener('click', () => {
         state.datasets=[];state.activeClass=null;state.activeMonth=null;state.searchQuery='';
         const si = document.getElementById('search-input') as HTMLInputElement; if(si) si.value='';
         [barChart,lineChart,pieChart,hBarChart].forEach(c=>{if(c){c.destroy();c=null}});
+        saveDataLocally();
         renderAll();
         showToast('تم حذف جميع البيانات','info');
     });
@@ -1935,13 +2288,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnLogin = document.getElementById('btn-login');
     const btnLogout = document.getElementById('btn-logout');
     
+    // Initial load from local storage
+    loadDataLocally();
+    renderAll();
+    
     if (btnLogin) {
         btnLogin.addEventListener('click', async () => {
             try {
                 await signInWithPopup(auth, googleProvider);
             } catch (error) {
                 console.error("Login error", error);
-                showToast('فشل تسجيل الدخول', 'error');
+                showToast('فشل تسجيل الدخول. تم تفعيل الحفظ المحلي التلقائي.', 'info', 5000);
+                const authWarning = document.getElementById('auth-warning');
+                if (authWarning) authWarning.style.display = 'none';
             }
         });
     }
@@ -1980,7 +2339,13 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             if (btnLogin) btnLogin.style.display = 'inline-flex';
             if (userInfo) userInfo.style.display = 'none';
-            if (authWarning) authWarning.style.display = 'flex';
+            if (authWarning) {
+                if (state.datasets.length > 0) {
+                    authWarning.style.display = 'none'; // Hide warning if local data exists
+                } else {
+                    authWarning.style.display = 'flex';
+                }
+            }
         }
     });
     
