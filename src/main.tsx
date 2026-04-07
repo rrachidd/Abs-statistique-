@@ -925,12 +925,12 @@ let currentCommitmentStudents: any[] = [];
 };
 
 (window as any).deleteLatenessRecord = (id: string) => {
-    if (confirm('هل أنت متأكد من حذف هذا السجل؟')) {
+    (window as any).showConfirmModal('هل أنت متأكد من حذف هذا السجل؟', () => {
         state.latenessRecords = state.latenessRecords.filter((r: any) => r.id !== id);
         saveDataLocally();
         renderLatenessTable();
         showToast('تم الحذف بنجاح', 'success');
-    }
+    });
 };
 
 function renderLatenessTable() {
@@ -977,11 +977,11 @@ function renderLatenessTable() {
 }
 
 (window as any).executePrintLateness = () => {
-    const content = document.getElementById('lateness-print-area');
+    const content = document.getElementById('lateness-content');
     const pa = document.getElementById('sheet-print-area');
     if (content && pa) {
         pa.innerHTML = `
-            <div style="padding: 20px; font-family: Arial, sans-serif; direction: rtl;">
+            <div style="padding: 20px; font-family: 'Cairo', sans-serif; direction: rtl;">
                 <h2 style="text-align: center; margin-bottom: 10px; color: #111;">سجل تأخرات التلاميذ</h2>
                 <h3 style="text-align: center; margin-bottom: 20px; color: #555;">القسم: ${state.activeClass}</h3>
                 ${content.innerHTML}
