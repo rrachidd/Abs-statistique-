@@ -576,6 +576,65 @@ function renderTable(){
     const tf = document.getElementById('table-footer'); if(tf) tf.innerHTML=`<span>عرض <strong>${students.length}</strong> من أصل <strong>${ds.students.length}</strong> تلميذ</span><span class="text-xs text-gray-400">${isD?'عرض تفصيلي — 31 يوم':'عرض مختصر'}</span>`;
 
     renderGuardiansTable();
+    renderLatenessMainTable();
+}
+
+function renderLatenessMainTable() {
+    const ltc = document.getElementById('lateness-main-table-card');
+    const ltb = document.getElementById('lateness-main-table-body');
+    
+    if (!ltc || !ltb) return;
+    
+    if (!state.activeClass) {
+        ltc.style.display = 'none';
+        return;
+    }
+    
+    let classRecords = state.latenessRecords.filter((r: any) => r.className === state.activeClass).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    
+    // Calculate lateness counts per student BEFORE filtering so the count is accurate for the student
+    const latenessCounts: Record<string, number> = {};
+    classRecords.forEach((r: any) => {
+        latenessCounts[r.studentId] = (latenessCounts[r.studentId] || 0) + 1;
+    });
+
+    if (state.searchQuery) {
+        const q = state.searchQuery.toLowerCase();
+        classRecords = classRecords.filter((r: any) => r.studentName.toLowerCase().includes(q) || r.studentId.toLowerCase().includes(q));
+    }
+    
+    if (classRecords.length === 0) {
+        ltc.style.display = 'none';
+        return;
+    }
+    
+    let b = '';
+    
+    classRecords.forEach((r: any, idx: number) => {
+        const count = latenessCounts[r.studentId];
+        let countHtml = `<span class="bg-gray-100 text-gray-600 px-2 py-1 rounded-md text-xs font-bold">${count} تأخرات</span>`;
+        if (count > 2) {
+            countHtml = `<span class="bg-red-100 text-red-600 px-2 py-1 rounded-md text-xs font-bold">${count} تأخرات</span>`;
+        } else if (count === 2) {
+            countHtml = `<span class="bg-orange-100 text-orange-600 px-2 py-1 rounded-md text-xs font-bold">${count} تأخرات</span>`;
+        } else if (count === 1) {
+            countHtml = `<span class="bg-emerald-100 text-emerald-600 px-2 py-1 rounded-md text-xs font-bold">تأخر واحد</span>`;
+        }
+        
+        b += `<tr class="fade-up" style="animation-delay:${Math.min(idx*20,400)}ms">
+            <td class="text-right font-bold">${r.studentName}</td>
+            <td class="text-gray-600 text-sm">${r.date}</td>
+            <td><span class="bg-rose-100 text-rose-700 px-2 py-1 rounded-md font-bold text-xs">${r.minutes} دقيقة</span></td>
+            <td class="text-gray-600 text-sm">${r.subject}</td>
+            <td class="text-center">${countHtml}</td>
+            <td class="no-print text-center">
+                <button onclick="deleteLatenessRecord('${r.id}')" class="text-red-500 hover:text-red-700 w-8 h-8 rounded-full hover:bg-red-50 transition-colors"><i class="fa-solid fa-trash"></i></button>
+            </td>
+        </tr>`;
+    });
+    
+    ltb.innerHTML = b;
+    ltc.style.display = '';
 }
 
 function buildCombinedAbsenceSheet(classDatasets: any[], sid: string, sheetId: string) {
@@ -934,6 +993,7 @@ let currentCommitmentStudents: any[] = [];
 };
 
 function renderLatenessTable() {
+    renderLatenessMainTable();
     const container = document.getElementById('lateness-content');
     if (!container) return;
     
@@ -944,6 +1004,12 @@ function renderLatenessTable() {
         return;
     }
     
+    // Calculate lateness counts per student
+    const latenessCounts: Record<string, number> = {};
+    classRecords.forEach((r: any) => {
+        latenessCounts[r.studentId] = (latenessCounts[r.studentId] || 0) + 1;
+    });
+    
     let html = `
     <table class="w-full text-sm text-right" style="border-collapse: collapse;">
         <thead class="bg-gray-50 text-gray-600 font-bold border-b border-gray-200">
@@ -952,6 +1018,7 @@ function renderLatenessTable() {
                 <th class="py-3 px-4" style="border: 1px solid #e5e7eb;">التاريخ</th>
                 <th class="py-3 px-4" style="border: 1px solid #e5e7eb;">المدة</th>
                 <th class="py-3 px-4" style="border: 1px solid #e5e7eb;">المادة</th>
+                <th class="py-3 px-4" style="border: 1px solid #e5e7eb;">عدد التأخرات</th>
                 <th class="py-3 px-4 no-print text-center" style="border: 1px solid #e5e7eb;">إجراء</th>
             </tr>
         </thead>
@@ -959,12 +1026,23 @@ function renderLatenessTable() {
     `;
     
     classRecords.forEach((r: any) => {
+        const count = latenessCounts[r.studentId];
+        let countHtml = `<span class="bg-gray-100 text-gray-600 px-2 py-1 rounded-md text-xs font-bold">${count} تأخرات</span>`;
+        if (count > 2) {
+            countHtml = `<span class="bg-red-100 text-red-600 px-2 py-1 rounded-md text-xs font-bold">${count} تأخرات</span>`;
+        } else if (count === 2) {
+            countHtml = `<span class="bg-orange-100 text-orange-600 px-2 py-1 rounded-md text-xs font-bold">${count} تأخرات</span>`;
+        } else if (count === 1) {
+            countHtml = `<span class="bg-emerald-100 text-emerald-600 px-2 py-1 rounded-md text-xs font-bold">تأخر واحد</span>`;
+        }
+        
         html += `
             <tr class="border-b border-gray-100 hover:bg-gray-50">
                 <td class="py-3 px-4 font-bold text-gray-800" style="border: 1px solid #e5e7eb;">${r.studentName}</td>
                 <td class="py-3 px-4 text-gray-600" style="border: 1px solid #e5e7eb;">${r.date}</td>
                 <td class="py-3 px-4" style="border: 1px solid #e5e7eb;"><span class="bg-rose-100 text-rose-700 px-2 py-1 rounded-md font-bold">${r.minutes} دقيقة</span></td>
                 <td class="py-3 px-4 text-gray-600" style="border: 1px solid #e5e7eb;">${r.subject}</td>
+                <td class="py-3 px-4 text-center" style="border: 1px solid #e5e7eb;">${countHtml}</td>
                 <td class="py-3 px-4 no-print text-center" style="border: 1px solid #e5e7eb;">
                     <button onclick="deleteLatenessRecord('${r.id}')" class="text-red-500 hover:text-red-700 w-8 h-8 rounded-full hover:bg-red-50 transition-colors"><i class="fa-solid fa-trash"></i></button>
                 </td>
@@ -1310,32 +1388,87 @@ function renderLatenessTable() {
     }
 };
 
-(window as any).printAllStudentsAbsenceSheets = () => {
+(window as any).exportAllStudentsSheetsExcel = () => {
     const classDatasets = getActiveClassDatasets();
     if (!classDatasets.length) return;
 
     const firstDs = classDatasets[0];
     const students = firstDs.students;
+    const m = firstDs.metadata;
 
     if (!students || !students.length) {
         showToast('لا يوجد تلاميذ في هذا القسم', 'error');
         return;
     }
 
-    showToast('جارٍ تجهيز الأوراق للطباعة...', 'info');
+    showToast('جارٍ تجهيز الأوراق للتصدير...', 'info');
 
-    let html = '';
-    students.forEach((st: any, idx: number) => {
-        const sheetId = `absence-sheet-all-${idx}`;
-        html += buildCombinedAbsenceSheet(classDatasets, st.id, sheetId);
-    });
+    try {
+        const wb = (window as any).XLSX.utils.book_new();
+        const hasS = classDatasets.some(ds => ds.summaryCols && ds.summaryCols.length > 0);
 
-    const pa = document.getElementById('sheet-print-area');
-    if(pa) {
-        pa.innerHTML = html;
-        pa.style.display = 'block';
-        (window as any).setPrintOrientation('landscape');
-        setTimeout(() => window.print(), 500);
+        students.forEach((st: any) => {
+            const data = [];
+            
+            data.push(['المملكة المغربية']);
+            data.push(['وزارة التربية الوطنية والتعليم الأولي والرياضة']);
+            data.push([`الأكاديمية الجهوية للتربية والتكوين — ${m.academy || '—'}`]);
+            data.push([]);
+            data.push(['المؤسسة:', m.institution || '—', 'السنة الدراسية:', m.year || '—']);
+            data.push(['المستوى:', m.level || '—', 'القسم:', m.class || '—']);
+            data.push(['رقم التلميذ:', st.id, 'الإسم الكامل:', `${st.family} ${st.name}`]);
+            data.push([]);
+
+            const headers = ['الشهر'];
+            for (let d = 1; d <= 31; d++) headers.push(d.toString());
+            headers.push('المجموع');
+            if (hasS) {
+                headers.push('يوم غ.م');
+                headers.push('يوم م');
+                headers.push('ساعة غ.م');
+                headers.push('ساعة م');
+            }
+            data.push(headers);
+
+            classDatasets.forEach(ds => {
+                const studentInMonth = ds.students.find((s: any) => s.id === st.id);
+                if (!studentInMonth) return;
+
+                const row = [ds.metadata.monthAr || ds.metadata.month];
+                for (let d = 1; d <= 31; d++) {
+                    const info = parseDayValue(studentInMonth.days[d]);
+                    const disp = info.type === 'none' ? '' : (info.type === 'present' ? '0' : (info.type === 'special' ? 'X' : info.val));
+                    row.push(disp);
+                }
+                row.push(calcTotalAbsences(studentInMonth));
+                if (hasS) {
+                    row.push(studentInMonth.summaries[0] || '0');
+                    row.push(studentInMonth.summaries[1] || '0');
+                    row.push(studentInMonth.summaries[2] || '0');
+                    row.push(studentInMonth.summaries[3] || '0');
+                }
+                data.push(row);
+            });
+
+            const ws = (window as any).XLSX.utils.aoa_to_sheet(data);
+            ws['!dir'] = 'rtl';
+            
+            let sheetName = `${st.family} ${st.name}`.replace(/[\[\]\*\/\\\?\:]/g, '').substring(0, 31);
+            let baseName = sheetName;
+            let counter = 1;
+            while (wb.SheetNames.includes(sheetName)) {
+                sheetName = `${baseName.substring(0, 28)}_${counter}`;
+                counter++;
+            }
+
+            (window as any).XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        });
+
+        (window as any).XLSX.writeFile(wb, `الأوراق_الفردية_${state.activeClass}.xlsx`);
+        showToast('تم تحميل الأوراق الفردية بنجاح', 'success');
+    } catch (err) {
+        console.error(err);
+        showToast('حدث خطأ أثناء تصدير الملف', 'error');
     }
 };
 
@@ -2357,6 +2490,18 @@ document.getElementById('confirm-modal-yes')?.addEventListener('click', () => {
 (window as any).openDetail = (sid: string) => {
     const ds=getActiveDataset();if(!ds)return;const st=ds.students.find((s: any)=>s.id===sid);if(!st)return;
     const sd=getSchoolDays(ds.students),ta=calcTotalAbsences(st),ad=calcAbsentDays(st);
+    
+    // Lateness records for this student
+    const studentLateness = state.latenessRecords.filter((r: any) => r.studentId === sid).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    let latenessHtml = '';
+    if (studentLateness.length > 0) {
+        latenessHtml = `<div class="mb-6"><h4 class="text-sm font-bold text-gray-700 mb-3"><i class="fa-solid fa-clock text-rose-600 ml-2"></i>التأخرات (${studentLateness.length})</h4><div class="card p-4">`;
+        studentLateness.forEach((r: any) => {
+            latenessHtml += `<div class="flex items-center justify-between py-2 border-b border-gray-50 last:border-0"><div class="flex flex-col"><span class="text-sm font-bold text-gray-800">${r.date}</span><span class="text-xs text-gray-500">${r.subject}</span></div><span class="px-3 py-1 rounded-lg text-xs font-bold bg-rose-100 text-rose-700">${r.minutes} دقيقة</span></div>`;
+        });
+        latenessHtml += `</div></div>`;
+    }
+
     let calH='';['أحد','إثنين','ثلاثاء','أربعاء','خميس','جمعة','سبت'].forEach(d=>{calH+=`<div class="text-center text-xs text-gray-400 font-semibold py-1">${d}</div>`});
     for(let d=1;d<=31;d++){const info=parseDayValue(st.days[d]);let bg='bg-gray-50 text-gray-300';if(info.type==='present')bg='bg-emerald-50 text-emerald-600';else if(info.type==='absent')bg=info.val>=2?'bg-red-500 text-white':'bg-red-100 text-red-600';else if(info.type==='special')bg='bg-amber-100 text-amber-700';calH+=`<div class="${bg} ${!sd.has(d)?'opacity-40':''}" style="aspect-ratio:1;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.72rem;font-weight:600"><span style="font-size:.7rem">${d}</span>${info.type==='absent'?`<span style="font-size:.6rem;font-weight:700">${info.val}</span>`:''}</div>`}
     let absH='';for(let d=1;d<=31;d++){const info=parseDayValue(st.days[d]);if(info.type==='absent'||info.type==='special'){absH+=`<div class="flex items-center justify-between py-2 border-b border-gray-50"><span class="text-sm font-semibold">اليوم ${d}</span><span class="px-3 py-1 rounded-lg text-xs font-bold ${info.type==='special'?'bg-amber-100 text-amber-700':'bg-red-100 text-red-600'}">${info.type==='special'?'X':info.val+' غياب'}</span></div>`}}
@@ -2368,6 +2513,7 @@ document.getElementById('confirm-modal-yes')?.addEventListener('click', () => {
         ${getActiveClassDatasets().length>1?`<div class="mb-6"><h4 class="text-sm font-bold text-gray-700 mb-3"><i class="fa-solid fa-chart-line text-amber-600 ml-2"></i>تطور الغياب</h4><div class="card p-4" style="max-height:220px"><canvas id="detailLineChart"></canvas></div></div>`:''}
         <div class="mb-6"><h4 class="text-sm font-bold text-gray-700 mb-3"><i class="fa-solid fa-calendar-days text-emerald-600 ml-2"></i>تقويم — ${ds.metadata.monthAr}</h4><div class="card p-4"><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">${calH}</div></div></div>
         ${absH?`<div class="mb-6"><h4 class="text-sm font-bold text-gray-700 mb-3"><i class="fa-solid fa-list-check text-red-500 ml-2"></i>أيام الغياب</h4><div class="card p-4">${absH}</div></div>`:`<div class="text-center py-8"><i class="fa-solid fa-circle-check text-4xl text-emerald-300 mb-3"></i><p class="text-sm text-gray-400">لا غيابات</p></div>`}
+        ${latenessHtml}
         ${ds.summaryCols.length>0?`<div class="mb-6"><div class="card p-4"><div class="grid grid-cols-2 gap-3">${['يوم غير مبرر','يوم مبرر','ساعة غير مبررة','ساعة مبررة'].map((l,i)=>`<div class="bg-gray-50 rounded-xl p-3 text-center"><p class="text-lg font-extrabold ${parseInt(st.summaries[i])>0?'text-red-600':'text-gray-400'}">${st.summaries[i]||'0'}</p><p class="text-xs text-gray-500">${l}</p></div>`).join('')}</div></div></div>`:''}
         <div class="flex gap-3 mt-2"><button onclick="closeDetailPanel();openAbsenceSheet('${st.id}')" class="btn btn-primary flex-1 justify-center"><i class="fa-solid fa-file-lines"></i> ورقة الغياب</button><button onclick="printStudentReport('${st.id}')" class="btn btn-outline flex-1 justify-center"><i class="fa-solid fa-print"></i> طباعة التقرير</button></div>`;
     }
