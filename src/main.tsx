@@ -9,7 +9,7 @@ const MONTH_NAMES={'janvier':'يناير','février':'فبراير','mars':'ما
 const MONTH_ORDER=['يناير','فبراير','مارس','أبريل','ماي','يونيو','يوليوز','غشت','شتنبر','أكتوبر','نونبر','دجنبر'];
 const CHART_COLORS=['#059669','#D97706','#DC2626','#7C3AED','#2563EB','#0891B2','#C026D3','#EA580C','#65A30D','#0D9488','#9333EA','#E11D48','#CA8A04','#0369A1','#BE185D','#4F46E5','#15803D','#B45309'];
 
-const state: any = {datasets:[],guardians:{},guardianDetails:{},activeClass:null,activeMonth:null,searchQuery:'',viewMode:'compact',sortMode:'rank',barChartMode:'total'};
+const state: any = {datasets:[],guardians:{},guardianDetails:{},activeClass:null,activeMonth:null,searchQuery:'',viewMode:'compact',sortMode:'rank',barChartMode:'total',latenessRecords:[]};
 let barChart: any = null, lineChart: any = null, pieChart: any = null, hBarChart: any = null, currentSheetStudentId: any = null;
 let currentUser: any = null;
 
@@ -44,6 +44,7 @@ function saveDataLocally() {
         localStorage.setItem('absence_datasets', JSON.stringify(state.datasets));
         localStorage.setItem('absence_guardians', JSON.stringify(state.guardians));
         localStorage.setItem('absence_guardianDetails', JSON.stringify(state.guardianDetails));
+        localStorage.setItem('absence_lateness', JSON.stringify(state.latenessRecords));
     } catch (e) {
         console.error("Local storage error", e);
     }
@@ -54,9 +55,11 @@ function loadDataLocally() {
         const ds = localStorage.getItem('absence_datasets');
         const gd = localStorage.getItem('absence_guardians');
         const gdd = localStorage.getItem('absence_guardianDetails');
+        const lat = localStorage.getItem('absence_lateness');
         if (ds) state.datasets = JSON.parse(ds);
         if (gd) state.guardians = JSON.parse(gd);
         if (gdd) state.guardianDetails = JSON.parse(gdd);
+        if (lat) state.latenessRecords = JSON.parse(lat);
         
         if (state.datasets.length > 0) {
             if (!state.activeClass || !state.datasets.find((d: any)=>getClassKey(d)===state.activeClass)) {
@@ -853,6 +856,142 @@ let currentCommitmentStudents: any[] = [];
 (window as any).closeParentsVisitsModal = () => {
     const modal = document.getElementById('parents-visits-modal');
     if (modal) modal.classList.remove('open');
+};
+
+(window as any).openLatenessModal = () => {
+    if (!state.activeClass) {
+        showToast('الرجاء اختيار قسم أولاً', 'error');
+        return;
+    }
+    
+    const select = document.getElementById('lateness-student-select');
+    if (select) {
+        const ds = getActiveDataset();
+        if (ds) {
+            select.innerHTML = ds.students.map((st: any) => `<option value="${st.id}">${st.family} ${st.name}</option>`).join('');
+        }
+    }
+    
+    const dateInput = document.getElementById('lateness-date') as HTMLInputElement;
+    if (dateInput) {
+        dateInput.value = new Date().toISOString().split('T')[0];
+    }
+    
+    renderLatenessTable();
+    
+    const m = document.getElementById('lateness-modal');
+    if (m) m.classList.add('open');
+};
+
+(window as any).closeLatenessModal = () => {
+    const m = document.getElementById('lateness-modal');
+    if (m) m.classList.remove('open');
+};
+
+(window as any).addLatenessRecord = () => {
+    const studentId = (document.getElementById('lateness-student-select') as HTMLSelectElement)?.value;
+    const minutes = (document.getElementById('lateness-minutes') as HTMLInputElement)?.value;
+    const date = (document.getElementById('lateness-date') as HTMLInputElement)?.value;
+    const subject = (document.getElementById('lateness-subject') as HTMLInputElement)?.value;
+    
+    if (!studentId || !minutes || !date || !subject) {
+        showToast('الرجاء ملء جميع الحقول', 'error');
+        return;
+    }
+    
+    const ds = getActiveDataset();
+    const student = ds?.students.find((s: any) => s.id === studentId);
+    
+    if (!student) return;
+    
+    const record = {
+        id: Date.now().toString(),
+        studentId,
+        studentName: `${student.family} ${student.name}`,
+        className: state.activeClass,
+        minutes: parseInt(minutes),
+        date,
+        subject
+    };
+    
+    state.latenessRecords.push(record);
+    saveDataLocally();
+    renderLatenessTable();
+    
+    (document.getElementById('lateness-minutes') as HTMLInputElement).value = '15';
+    (document.getElementById('lateness-subject') as HTMLInputElement).value = '';
+    
+    showToast('تم تسجيل التأخر بنجاح', 'success');
+};
+
+(window as any).deleteLatenessRecord = (id: string) => {
+    if (confirm('هل أنت متأكد من حذف هذا السجل؟')) {
+        state.latenessRecords = state.latenessRecords.filter((r: any) => r.id !== id);
+        saveDataLocally();
+        renderLatenessTable();
+        showToast('تم الحذف بنجاح', 'success');
+    }
+};
+
+function renderLatenessTable() {
+    const container = document.getElementById('lateness-content');
+    if (!container) return;
+    
+    const classRecords = state.latenessRecords.filter((r: any) => r.className === state.activeClass).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    
+    if (classRecords.length === 0) {
+        container.innerHTML = '<div class="text-center text-gray-400 py-8">لا توجد تأخرات مسجلة لهذا القسم</div>';
+        return;
+    }
+    
+    let html = `
+    <table class="w-full text-sm text-right" style="border-collapse: collapse;">
+        <thead class="bg-gray-50 text-gray-600 font-bold border-b border-gray-200">
+            <tr>
+                <th class="py-3 px-4" style="border: 1px solid #e5e7eb;">التلميذ(ة)</th>
+                <th class="py-3 px-4" style="border: 1px solid #e5e7eb;">التاريخ</th>
+                <th class="py-3 px-4" style="border: 1px solid #e5e7eb;">المدة</th>
+                <th class="py-3 px-4" style="border: 1px solid #e5e7eb;">المادة</th>
+                <th class="py-3 px-4 no-print text-center" style="border: 1px solid #e5e7eb;">إجراء</th>
+            </tr>
+        </thead>
+        <tbody>
+    `;
+    
+    classRecords.forEach((r: any) => {
+        html += `
+            <tr class="border-b border-gray-100 hover:bg-gray-50">
+                <td class="py-3 px-4 font-bold text-gray-800" style="border: 1px solid #e5e7eb;">${r.studentName}</td>
+                <td class="py-3 px-4 text-gray-600" style="border: 1px solid #e5e7eb;">${r.date}</td>
+                <td class="py-3 px-4" style="border: 1px solid #e5e7eb;"><span class="bg-rose-100 text-rose-700 px-2 py-1 rounded-md font-bold">${r.minutes} دقيقة</span></td>
+                <td class="py-3 px-4 text-gray-600" style="border: 1px solid #e5e7eb;">${r.subject}</td>
+                <td class="py-3 px-4 no-print text-center" style="border: 1px solid #e5e7eb;">
+                    <button onclick="deleteLatenessRecord('${r.id}')" class="text-red-500 hover:text-red-700 w-8 h-8 rounded-full hover:bg-red-50 transition-colors"><i class="fa-solid fa-trash"></i></button>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+}
+
+(window as any).executePrintLateness = () => {
+    const content = document.getElementById('lateness-print-area');
+    const pa = document.getElementById('sheet-print-area');
+    if (content && pa) {
+        pa.innerHTML = `
+            <div style="padding: 20px; font-family: Arial, sans-serif; direction: rtl;">
+                <h2 style="text-align: center; margin-bottom: 10px; color: #111;">سجل تأخرات التلاميذ</h2>
+                <h3 style="text-align: center; margin-bottom: 20px; color: #555;">القسم: ${state.activeClass}</h3>
+                ${content.innerHTML}
+            </div>
+        `;
+        pa.style.display = 'block';
+        (window as any).setPrintOrientation('portrait');
+        (window as any).closeLatenessModal();
+        setTimeout(() => window.print(), 500);
+    }
 };
 
 (window as any).executePrintParentsVisits = () => {
@@ -2150,7 +2289,7 @@ document.getElementById('confirm-modal-yes')?.addEventListener('click', () => {
             }
         }
         
-        state.datasets=[];state.activeClass=null;state.activeMonth=null;state.searchQuery='';
+        state.datasets=[];state.activeClass=null;state.activeMonth=null;state.searchQuery='';state.latenessRecords=[];
         const si = document.getElementById('search-input') as HTMLInputElement; if(si) si.value='';
         [barChart,lineChart,pieChart,hBarChart].forEach(c=>{if(c){c.destroy();c=null}});
         saveDataLocally();
