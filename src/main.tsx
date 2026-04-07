@@ -324,7 +324,7 @@ function processGuardianExcel(buffer: any) {
 
         if (addedCount > 0) {
             saveGuardiansToFirebase();
-            showToast(`تم استيراد أرقام هواتف ${addedCount} ولي أمر بنجاح`, 'success');
+            showToast(`تم استيراد وتحيين أرقام هواتف ${addedCount} ولي أمر بنجاح`, 'success');
             renderTable();
             // Re-render WhatsApp modal if it's open
             const m = document.getElementById('whatsapp-modal');
@@ -332,7 +332,7 @@ function processGuardianExcel(buffer: any) {
                 (window as any).openWhatsAppModal();
             }
         } else {
-            showToast(`لم يتم العثور على أرقام هواتف صالحة`, 'info');
+            showToast(`لم يتم العثور على أرقام هواتف صالحة في الملف`, 'info');
         }
 
     } catch (err: any) {
@@ -500,6 +500,17 @@ function getStudentPhone(st: any): string {
     }
 };
 
+function getStudentGuardianInfo(st: any) {
+    if (!st) return {};
+    const id = st.id ? String(st.id).trim().toLowerCase() : '';
+    const family = st.family ? String(st.family).trim().toLowerCase() : '';
+    const name = st.name ? String(st.name).trim().toLowerCase() : '';
+    const f1 = `${family} ${name}`.replace(/\s+/g, ' ').trim();
+    const f2 = `${name} ${family}`.replace(/\s+/g, ' ').trim();
+    
+    return state.guardianDetails[id] || state.guardianDetails[f1] || state.guardianDetails[f2] || {};
+}
+
 function renderGuardiansTable() {
     const ds = getActiveDataset();
     const gtc = document.getElementById('guardians-table-card');
@@ -507,6 +518,26 @@ function renderGuardiansTable() {
     
     if (!ds || !gtc || !gtb) return;
     
+    let withPhone = 0;
+    let withoutPhone = 0;
+    ds.students.forEach((st: any) => {
+        if (getStudentPhone(st)) withPhone++;
+        else withoutPhone++;
+    });
+    
+    const analysisEl = document.getElementById('guardians-analysis');
+    if (analysisEl) {
+        const total = ds.students.length;
+        const percentage = total > 0 ? Math.round((withPhone / total) * 100) : 0;
+        analysisEl.innerHTML = `
+            <div class="flex items-center gap-2">
+                <span class="text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md"><i class="fa-solid fa-check mr-1"></i> ${withPhone} متوفر</span>
+                <span class="text-rose-600 bg-rose-50 px-2 py-1 rounded-md"><i class="fa-solid fa-xmark mr-1"></i> ${withoutPhone} غير متوفر</span>
+                <span class="text-blue-600 bg-blue-50 px-2 py-1 rounded-md ml-2">${percentage}% إنجاز</span>
+            </div>
+        `;
+    }
+
     let students = [...ds.students];
     if (state.searchQuery) {
         const q = state.searchQuery.toLowerCase();
@@ -517,6 +548,12 @@ function renderGuardiansTable() {
     
     students.forEach((st, idx) => {
         const phone = getStudentPhone(st);
+        const details = getStudentGuardianInfo(st);
+        
+        let detailsHtml = '';
+        if (details.father) detailsHtml += `<div class="text-[10px] text-gray-400">الأب: ${details.father}</div>`;
+        if (details.mother) detailsHtml += `<div class="text-[10px] text-gray-400">الأم: ${details.mother}</div>`;
+        if (details.guardian) detailsHtml += `<div class="text-[10px] text-gray-400">الولي: ${details.guardian}</div>`;
         
         let phoneHtml = '';
         if (phone) {
@@ -532,7 +569,10 @@ function renderGuardiansTable() {
         }
         
         b += `<tr class="fade-up" style="animation-delay:${Math.min(idx*20,400)}ms">
-            <td class="text-right font-bold">${st.family} ${st.name}</td>
+            <td class="text-right">
+                <div class="font-bold text-gray-800">${st.family} ${st.name}</div>
+                ${detailsHtml}
+            </td>
             <td class="text-gray-500 text-sm">${st.id}</td>
             <td dir="ltr" id="phone-cell-${st.id}">
                 ${phoneHtml}
