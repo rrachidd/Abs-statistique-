@@ -9,7 +9,21 @@ const MONTH_NAMES={'janvier':'يناير','février':'فبراير','mars':'ما
 const MONTH_ORDER=['يناير','فبراير','مارس','أبريل','ماي','يونيو','يوليوز','غشت','شتنبر','أكتوبر','نونبر','دجنبر'];
 const CHART_COLORS=['#059669','#D97706','#DC2626','#7C3AED','#2563EB','#0891B2','#C026D3','#EA580C','#65A30D','#0D9488','#9333EA','#E11D48','#CA8A04','#0369A1','#BE185D','#4F46E5','#15803D','#B45309'];
 
-const state: any = {datasets:[],guardians:{},guardianDetails:{},activeClass:null,activeMonth:null,searchQuery:'',viewMode:'compact',sortMode:'rank',barChartMode:'total',latenessRecords:[]};
+const state: any = {datasets:[],guardians:{},guardianDetails:{},activeClass:null,activeMonth:null,reportPeriod:'all',searchQuery:'',viewMode:'compact',sortMode:'rank',barChartMode:'total',latenessRecords:[]};
+(window as any).state = state;
+
+function updateReportPeriodDropdown() {
+    const select = document.getElementById('report-period-select') as HTMLSelectElement;
+    if (!select) return;
+    
+    const months = getClassMonths(state.activeClass);
+    let html = '<option value="all">مجموع الأشهر</option>';
+    months.forEach((ds: any) => {
+        html += `<option value="${ds.metadata.month}">${ds.metadata.monthAr}</option>`;
+    });
+    select.innerHTML = html;
+    select.value = state.reportPeriod;
+}
 let barChart: any = null, lineChart: any = null, pieChart: any = null, hBarChart: any = null, currentSheetStudentId: any = null;
 let currentUser: any = null;
 
@@ -365,6 +379,15 @@ function parseData(raw: any[]){
     return{metadata:meta,students,summaryCols};
 }
 
+function getFilteredDatasets() {
+    const classDatasets = getActiveClassDatasets();
+    if (state.reportPeriod === 'all') {
+        return classDatasets;
+    } else {
+        return classDatasets.filter((ds: any) => ds.metadata.month === state.reportPeriod);
+    }
+}
+
 function renderAll(){
     const has=state.datasets.length>0;
     const uploadSection = document.getElementById('upload-section');
@@ -378,7 +401,7 @@ function renderAll(){
     if(btnPdf) btnPdf.style.display=has?'':'none';
     
     if(!has)return;
-    renderClassTabs();renderMonthTabs();renderClassInfo();renderStats();renderCharts();renderTable();
+    renderClassTabs();renderMonthTabs();renderClassInfo();renderStats();renderCharts();renderTable();updateReportPeriodDropdown();
 }
 
 function renderClassTabs(){const classes=getUniqueClasses();const c=document.getElementById('class-tabs');if(!c)return;c.innerHTML='';classes.forEach((info,cn)=>{const months=getClassMonths(cn);const btn=document.createElement('button');btn.className=`class-tab ${cn===state.activeClass?'active':''}`;btn.innerHTML=`<i class="fa-solid fa-users-rectangle text-sm ${cn===state.activeClass?'text-emerald-600':'text-gray-400'}"></i><span>${cn}</span><span class="month-count">${months.length} ${months.length===1?'شهر':'أشهر'}</span>`;btn.onclick=()=>{state.activeClass=cn;const cm=getClassMonths(cn);if(!cm.find((d: any)=>d.metadata.month===state.activeMonth))state.activeMonth=cm.length?cm[0].metadata.month:null;state.searchQuery='';(document.getElementById('search-input') as HTMLInputElement).value='';renderAll()};c.appendChild(btn)});const tc = document.getElementById('tabs-connector'); if(tc) tc.style.display=classes.size>0?'':'none'}
@@ -846,12 +869,16 @@ let currentCommitmentStudents: any[] = [];
 };
 
 (window as any).openParentsVisitsModal = () => {
-    const classDatasets = getActiveClassDatasets();
+    const classDatasets = getFilteredDatasets();
     if (!classDatasets.length) {
-        showToast('لا توجد بيانات', 'error');
+        showToast('لا توجد بيانات للفترة المختارة', 'error');
         return;
     }
     
+    const periodName = getPeriodName();
+    const periodEl = document.getElementById('parents-visits-modal-period');
+    if (periodEl) periodEl.innerText = `(${periodName})`;
+
     const firstDs = classDatasets[0];
     const m = firstDs.metadata;
     
@@ -864,6 +891,7 @@ let currentCommitmentStudents: any[] = [];
                 <span>المستوى: ${m.level || '—'}</span>
                 <span>القسم: ${m.className || '—'}</span>
                 <span>الموسم الدراسي: ${m.year || '—'}</span>
+                <span>الفترة: ${periodName}</span>
             </div>
         </div>
         
@@ -1149,15 +1177,16 @@ function renderLatenessTable() {
 };
 
 (window as any).printCommitments = () => {
-    const classDatasets = getActiveClassDatasets();
+    const classDatasets = getFilteredDatasets();
     if (!classDatasets.length) {
-        showToast('لا توجد بيانات', 'error');
+        showToast('لا توجد بيانات للفترة المختارة', 'error');
         return;
     }
     
+    const periodName = getPeriodName();
     const firstDs = classDatasets[0];
     
-    // Aggregate absences across all months
+    // Aggregate absences across selected months
     const studentAbsences = new Map<string, { student: any, totalAbsences: number }>();
     
     classDatasets.forEach((ds: any) => {
@@ -1171,13 +1200,13 @@ function renderLatenessTable() {
         });
     });
 
-    // Filter students with more than 10 hours of absence across all months
+    // Filter students with more than 10 hours of absence across selected months
     currentCommitmentStudents = Array.from(studentAbsences.values())
         .filter(item => item.totalAbsences > 10)
         .map(item => ({ ...item.student, aggregatedAbsences: item.totalAbsences }));
     
     if (currentCommitmentStudents.length === 0) {
-        showToast('لا يوجد تلاميذ تجاوزوا 10 ساعات من الغياب في هذا القسم', 'info');
+        showToast(`لا يوجد تلاميذ تجاوزوا 10 ساعات من الغياب في هذا القسم خلال ${periodName}`, 'info');
         return;
     }
 
@@ -1187,6 +1216,7 @@ function renderLatenessTable() {
             <div id="commitment-sheet-${index}" class="bg-white p-8 rounded-xl shadow-sm border border-gray-200 mb-6" style="font-family: 'Cairo', sans-serif; direction: rtl; line-height: 2;">
                 <div style="text-align: center; margin-bottom: 40px;">
                     <h2 style="font-size: 24px; font-weight: bold; text-decoration: underline;">التزام ولي الأمر بخصوص المواظبة</h2>
+                    <p style="font-size: 14px; color: #666; margin-top: 10px;">الفترة: ${periodName}</p>
                 </div>
                 
                 <div style="font-size: 18px; margin-bottom: 30px;">
@@ -1273,14 +1303,25 @@ function renderLatenessTable() {
     if (m) m.classList.remove('open');
 };
 
+function getPeriodName() {
+    if (state.reportPeriod === 'all') return 'مجموع الأشهر';
+    const months = getClassMonths(state.activeClass);
+    const ds = months.find((d: any) => d.metadata.month === state.reportPeriod);
+    return ds ? ds.metadata.monthAr : 'غير محدد';
+}
+
 (window as any).openWhatsAppModal = () => {
-    const classDatasets = getActiveClassDatasets();
+    const classDatasets = getFilteredDatasets();
     if (!classDatasets.length) {
-        showToast('لا توجد بيانات', 'error');
+        showToast('لا توجد بيانات للفترة المختارة', 'error');
         return;
     }
     
-    // Aggregate absences across all months
+    const periodName = getPeriodName();
+    const periodEl = document.getElementById('whatsapp-modal-period');
+    if (periodEl) periodEl.innerText = `(${periodName})`;
+
+    // Aggregate absences across selected months
     const studentAbsences = new Map<string, { student: any, totalAbsences: number }>();
     
     classDatasets.forEach((ds: any) => {
@@ -1429,9 +1470,13 @@ function renderLatenessTable() {
 };
 
 (window as any).exportAllStudentsSheetsExcel = () => {
-    const classDatasets = getActiveClassDatasets();
-    if (!classDatasets.length) return;
+    const classDatasets = getFilteredDatasets();
+    if (!classDatasets.length) {
+        showToast('لا توجد بيانات للفترة المختارة', 'error');
+        return;
+    }
 
+    const periodName = getPeriodName();
     const firstDs = classDatasets[0];
     const students = firstDs.students;
     const m = firstDs.metadata;
@@ -1457,6 +1502,7 @@ function renderLatenessTable() {
             data.push(['المؤسسة:', m.institution || '—', 'السنة الدراسية:', m.year || '—']);
             data.push(['المستوى:', m.level || '—', 'القسم:', m.class || '—']);
             data.push(['رقم التلميذ:', st.id, 'الإسم الكامل:', `${st.family} ${st.name}`]);
+            data.push(['الفترة:', periodName]);
             data.push([]);
 
             const headers = ['الشهر'];
@@ -1504,7 +1550,7 @@ function renderLatenessTable() {
             (window as any).XLSX.utils.book_append_sheet(wb, ws, sheetName);
         });
 
-        (window as any).XLSX.writeFile(wb, `الأوراق_الفردية_${state.activeClass}.xlsx`);
+        (window as any).XLSX.writeFile(wb, `الأوراق_الفردية_${state.activeClass}_${periodName}.xlsx`);
         showToast('تم تحميل الأوراق الفردية بنجاح', 'success');
     } catch (err) {
         console.error(err);
@@ -1520,9 +1566,13 @@ let currentSummaryHtml = '';
 };
 
 (window as any).printClassAbsenceSummary = () => {
-    const classDatasets = getActiveClassDatasets();
-    if (!classDatasets.length) return;
+    const classDatasets = getFilteredDatasets();
+    if (!classDatasets.length) {
+        showToast('لا توجد بيانات للفترة المختارة', 'error');
+        return;
+    }
 
+    const periodName = getPeriodName();
     const firstDs = classDatasets[0];
     const students = firstDs.students;
 
@@ -1542,8 +1592,9 @@ let currentSummaryHtml = '';
             <div class="info-cell"><span class="lbl">السنة الدراسية:</span><span class="val">${firstDs.metadata.year||'—'}</span></div>
             <div class="info-cell"><span class="lbl">المستوى:</span><span class="val">${firstDs.metadata.level||'—'}</span></div>
             <div class="info-cell"><span class="lbl">القسم:</span><span class="val">${firstDs.metadata.class||'—'}</span></div>
+            <div class="info-cell"><span class="lbl">الفترة:</span><span class="val">${periodName}</span></div>
         </div>
-        <h3 style="text-align:center; font-weight:bold; font-size:16px; margin-bottom:15px; text-decoration:underline;">لائحة الغياب الإجمالية للتلاميذ</h3>
+        <h3 style="text-align:center; font-weight:bold; font-size:16px; margin-bottom:15px; text-decoration:underline;">لائحة الغياب الإجمالية للتلاميذ (${periodName})</h3>
         <table class="sheet-tbl" style="width:100%;">
             <thead>
                 <tr>
@@ -1639,9 +1690,13 @@ let currentSummaryHtml = '';
 };
 
 (window as any).exportClassAbsenceListExcel = () => {
-    const classDatasets = getActiveClassDatasets();
-    if (!classDatasets.length) return;
+    const classDatasets = getFilteredDatasets();
+    if (!classDatasets.length) {
+        showToast('لا توجد بيانات للفترة المختارة', 'error');
+        return;
+    }
 
+    const periodName = getPeriodName();
     const firstDs = classDatasets[0];
     const students = firstDs.students;
 
@@ -1680,7 +1735,7 @@ let currentSummaryHtml = '';
         
         const wb = (window as any).XLSX.utils.book_new();
         (window as any).XLSX.utils.book_append_sheet(wb, ws, "لائحة الغياب");
-        (window as any).XLSX.writeFile(wb, `لائحة_الغياب_الإجمالية_${state.activeClass}.xlsx`);
+        (window as any).XLSX.writeFile(wb, `لائحة_الغياب_الإجمالية_${state.activeClass}_${periodName}.xlsx`);
         showToast('تم تحميل لائحة الغياب بنجاح', 'success');
     } catch (err) {
         console.error(err);
@@ -1717,9 +1772,13 @@ let currentSummaryHtml = '';
 };
 
 (window as any).exportAllStudentsSheetsPDF = async () => {
-    const classDatasets = getActiveClassDatasets();
-    if (!classDatasets.length) return;
+    const classDatasets = getFilteredDatasets();
+    if (!classDatasets.length) {
+        showToast('لا توجد بيانات للفترة المختارة', 'error');
+        return;
+    }
 
+    const periodName = getPeriodName();
     const firstDs = classDatasets[0];
     const students = firstDs.students;
 
@@ -1776,9 +1835,9 @@ let currentSummaryHtml = '';
 };
 
 (window as any).generateClassInvestment = () => {
-    const classDatasets = getActiveClassDatasets();
+    const classDatasets = getFilteredDatasets();
     if (!classDatasets.length) {
-        showToast('لا يوجد بيانات لهذا القسم', 'error');
+        showToast('لا يوجد بيانات للفترة المختارة لهذا القسم', 'error');
         return;
     }
     
@@ -1790,8 +1849,9 @@ let currentSummaryHtml = '';
     const loadingEl = document.getElementById('ai-loading');
     const contentEl = document.getElementById('ai-content');
     
+    const periodName = getPeriodName();
     if (titleEl) titleEl.innerText = 'استثمار غيابات القسم';
-    if (subtitleEl) subtitleEl.innerText = state.activeClass || '';
+    if (subtitleEl) subtitleEl.innerText = `${state.activeClass || ''} — ${periodName}`;
     if (loadingEl) loadingEl.style.display = 'none';
     
     const firstDs = classDatasets[0];
@@ -1851,6 +1911,7 @@ let currentSummaryHtml = '';
                 <span>المستوى: ${meta.level || '—'}</span>
                 <span>القسم: ${meta.className || '—'}</span>
                 <span>الموسم الدراسي: ${meta.year || '—'}</span>
+                <span>الفترة: ${periodName}</span>
             </div>
         </div>
         
@@ -1984,8 +2045,21 @@ let compareChartInstance: any = null;
         return;
     }
 
+    const filteredDatasets = state.reportPeriod === 'all' 
+        ? state.datasets 
+        : state.datasets.filter((ds: any) => ds.metadata.month === state.reportPeriod);
+
+    if (filteredDatasets.length === 0) {
+        showToast('لا توجد بيانات للفترة المختارة للمقارنة', 'error');
+        return;
+    }
+
+    const periodName = getPeriodName();
+    const subtitleEl = document.getElementById('compare-modal-subtitle');
+    if (subtitleEl) subtitleEl.innerText = `الفترة: ${periodName}`;
+
     const classesData: Record<string, any> = {};
-    state.datasets.forEach((ds: any) => {
+    filteredDatasets.forEach((ds: any) => {
         const className = ds.metadata.class;
         if (!classesData[className]) {
             classesData[className] = {
@@ -2171,9 +2245,9 @@ let compareChartInstance: any = null;
 };
 
 (window as any).generateAbsenceReport = () => {
-    const classDatasets = getActiveClassDatasets();
+    const classDatasets = getFilteredDatasets();
     if (!classDatasets.length) {
-        showToast('لا يوجد بيانات لهذا القسم', 'error');
+        showToast('لا يوجد بيانات للفترة المختارة لهذا القسم', 'error');
         return;
     }
     
@@ -2185,8 +2259,9 @@ let compareChartInstance: any = null;
     const loadingEl = document.getElementById('ai-loading');
     const contentEl = document.getElementById('ai-content');
     
+    const periodName = getPeriodName();
     if (titleEl) titleEl.innerText = 'تقرير مفصل حول ظاهرة الغياب';
-    if (subtitleEl) subtitleEl.innerText = state.activeClass || '';
+    if (subtitleEl) subtitleEl.innerText = `${state.activeClass || ''} — ${periodName}`;
     if (loadingEl) loadingEl.style.display = 'none';
     
     const firstDs = classDatasets[0];
@@ -2236,13 +2311,14 @@ let compareChartInstance: any = null;
                 <span>المستوى: ${meta.level || '—'}</span>
                 <span>القسم: ${meta.className || '—'}</span>
                 <span>الموسم الدراسي: ${meta.year || '—'}</span>
+                <span>الفترة: ${periodName}</span>
             </div>
         </div>
         
         <div class="mb-8">
             <h3 class="text-lg font-bold mb-3 text-indigo-700 border-b border-indigo-100 pb-2"><i class="fa-solid fa-magnifying-glass-chart ml-2"></i>1. تشخيص الظاهرة بناءً على الأرقام</h3>
             <p class="mb-4 text-justify leading-relaxed">
-                من خلال تحليل بيانات الغياب للقسم <strong>${meta.className || '—'}</strong>، يتبين أن مجموع الغيابات المسجلة بلغ <strong>${totalAbsences}</strong> وحدة زمنية، 
+                من خلال تحليل بيانات الغياب للقسم <strong>${meta.className || '—'}</strong> خلال <strong>${periodName}</strong>، يتبين أن مجموع الغيابات المسجلة بلغ <strong>${totalAbsences}</strong> وحدة زمنية، 
                 منها <strong>${unjustifiedAbsences}</strong> غياباً غير مبرر، وهو ما يمثل نسبة <strong>${unjustifiedRate}%</strong> من إجمالي الغيابات. 
                 ويبلغ متوسط الغياب لكل تلميذ حوالي <strong>${absenceRate}</strong> وحدة زمنية.
             </p>
