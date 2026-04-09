@@ -1,5 +1,5 @@
 {
-  "name": "",
-  "description": "",
+  "name": "Supabase Starter",
+  "description": "A modern web application using Supabase for authentication, database, and real-time features.",
   "requestFramePermissions": []
 }

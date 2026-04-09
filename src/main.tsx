@@ -1,5 +1,5 @@
 import './index.css';
-import { auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, collection, doc, setDoc, getDocs, deleteDoc } from './firebase';
+import { auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, collection, doc, setDoc, getDocs, deleteDoc, setPersistence, browserLocalPersistence } from './firebase';
 import { GoogleGenAI } from '@google/genai';
 import { marked } from 'marked';
 
@@ -59,6 +59,13 @@ function saveDataLocally() {
         localStorage.setItem('absence_guardians', JSON.stringify(state.guardians));
         localStorage.setItem('absence_guardianDetails', JSON.stringify(state.guardianDetails));
         localStorage.setItem('absence_lateness', JSON.stringify(state.latenessRecords));
+        if (currentUser) {
+            localStorage.setItem('absence_user_cache', JSON.stringify({
+                uid: currentUser.uid,
+                displayName: currentUser.displayName,
+                photoURL: currentUser.photoURL
+            }));
+        }
     } catch (e) {
         console.error("Local storage error", e);
     }
@@ -70,10 +77,15 @@ function loadDataLocally() {
         const gd = localStorage.getItem('absence_guardians');
         const gdd = localStorage.getItem('absence_guardianDetails');
         const lat = localStorage.getItem('absence_lateness');
+        const userCache = localStorage.getItem('absence_user_cache');
+
         if (ds) state.datasets = JSON.parse(ds);
         if (gd) state.guardians = JSON.parse(gd);
         if (gdd) state.guardianDetails = JSON.parse(gdd);
         if (lat) state.latenessRecords = JSON.parse(lat);
+        if (userCache && !currentUser) {
+            currentUser = JSON.parse(userCache);
+        }
         
         if (state.datasets.length > 0) {
             if (!state.activeClass || !state.datasets.find((d: any)=>getClassKey(d)===state.activeClass)) {
@@ -88,6 +100,53 @@ function loadDataLocally() {
         console.error("Local storage load error", e);
     }
 }
+
+(window as any).exportData = () => {
+    const data = {
+        datasets: state.datasets,
+        guardians: state.guardians,
+        guardianDetails: state.guardianDetails,
+        latenessRecords: state.latenessRecords,
+        exportedAt: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `absence_backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('تم تصدير نسخة احتياطية بنجاح', 'success');
+};
+
+(window as any).importData = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e: any) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (re: any) => {
+            try {
+                const data = JSON.parse(re.target.result);
+                if (data.datasets) state.datasets = data.datasets;
+                if (data.guardians) state.guardians = data.guardians;
+                if (data.guardianDetails) state.guardianDetails = data.guardianDetails;
+                if (data.latenessRecords) state.latenessRecords = data.latenessRecords;
+                
+                saveDataLocally();
+                renderAll();
+                showToast('تم استيراد البيانات بنجاح', 'success');
+            } catch (err) {
+                console.error("Import error", err);
+                showToast('خطأ في استيراد الملف', 'error');
+            }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+};
 
 async function saveDatasetToFirebase(dataset: any) {
     saveDataLocally();
@@ -198,6 +257,7 @@ function processExcel(buffer: any,fileName: string){
         if (currentUser) {
             saveDatasetToFirebase(newDataset);
         } else {
+            saveDataLocally();
             showToast('البيانات محفوظة محلياً فقط. يرجى تسجيل الدخول لحفظها في السحابة.', 'info', 5000);
         }
     }catch(err: any){console.error(err);showToast(`خطأ: ${err.message}`,'error')}
@@ -2646,6 +2706,7 @@ document.getElementById('confirm-modal-yes')?.addEventListener('click', () => {
 
 // Setup event listeners
 document.addEventListener('DOMContentLoaded', () => {
+    setPersistence(auth, browserLocalPersistence).catch(console.error);
     const uploadZone=document.getElementById('upload-zone');
     const fileInput=document.getElementById('file-input') as HTMLInputElement;
     const guardianFileInput=document.getElementById('guardian-file-input') as HTMLInputElement;
@@ -2729,6 +2790,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const authWarning = document.getElementById('auth-warning');
         
         if (user) {
+            localStorage.setItem('absence_user_cache', JSON.stringify({
+                uid: user.uid,
+                displayName: user.displayName,
+                photoURL: user.photoURL
+            }));
             if (btnLogin) btnLogin.style.display = 'none';
             if (userInfo) userInfo.style.display = 'flex';
             if (userName) userName.textContent = user.displayName || 'مستخدم';
@@ -2738,6 +2804,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await loadGuardiansFromFirebase();
             await loadDatasetsFromFirebase();
         } else {
+            localStorage.removeItem('absence_user_cache');
             if (btnLogin) btnLogin.style.display = 'inline-flex';
             if (userInfo) userInfo.style.display = 'none';
             if (authWarning) {
