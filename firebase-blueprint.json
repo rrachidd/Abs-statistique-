@@ -39,13 +39,13 @@
     }
   },
   "firestore": {
-    "/datasets/{datasetId}": {
+    "/users/{userId}/datasets/{datasetId}": {
       "schema": "datasets",
-      "description": "Absence datasets."
+      "description": "User's absence datasets."
     },
-    "/guardians/{guardianId}": {
-      "schema": "guardians",
-      "description": "Guardian contacts."
+    "/users/{userId}/settings/{settingId}": {
+      "schema": "object",
+      "description": "User settings like guardians."
     }
   }
 }

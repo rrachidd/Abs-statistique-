@@ -3,6 +3,57 @@ import { auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged,
 import { GoogleGenAI } from '@google/genai';
 import { marked } from 'marked';
 
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
 // Expose global variables and functions for inline HTML event handlers
 const MAX_FILE_SIZE=5*1024*1024;
 const MONTH_NAMES={'janvier':'يناير','février':'فبراير','mars':'مارس','avril':'أبريل','mai':'ماي','juin':'يونيو','juillet':'يوليوز','août':'غشت','septembre':'شتنبر','octobre':'أكتوبر','novembre':'نونبر','décembre':'دجنبر','يناير':'يناير','فبراير':'فبراير','مارس':'مارس','أبريل':'أبريل','ماي':'ماي','يونيو':'يونيو','يوليوز':'يوليوز','غشت':'غشت','شتنبر':'شتنبر','أكتوبر':'أكتوبر','نونبر':'نونبر','دجنبر':'دجنبر','january':'يناير','february':'فبراير','march':'مارس','april':'أبريل','may':'ماي','june':'يونيو','july':'يوليوز','august':'غشت','september':'شتنبر','october':'أكتوبر','november':'نونبر','december':'دجنبر'};
@@ -174,8 +225,9 @@ function loadDataLocally() {
 async function saveDatasetToFirebase(dataset: any) {
     saveDataLocally();
     if (!currentUser) return;
+    const datasetId = getDatasetId(dataset);
+    const path = `users/${currentUser.uid}/datasets/${datasetId}`;
     try {
-        const datasetId = getDatasetId(dataset);
         const docRef = doc(db, `users/${currentUser.uid}/datasets`, datasetId);
         await setDoc(docRef, {
             userId: currentUser.uid,
@@ -187,25 +239,26 @@ async function saveDatasetToFirebase(dataset: any) {
         });
         console.log("Dataset saved to Firebase:", datasetId);
     } catch (error) {
-        console.error("Error saving dataset:", error);
-        showToast('حدث خطأ أثناء الحفظ في قاعدة البيانات', 'error');
+        handleFirestoreError(error, OperationType.WRITE, path);
     }
 }
 
 async function saveGuardiansToFirebase() {
     saveDataLocally();
     if (!currentUser) return;
+    const path = `users/${currentUser.uid}/settings/guardians`;
     try {
         const docRef = doc(db, `users/${currentUser.uid}/settings`, 'guardians');
         await setDoc(docRef, { data: state.guardians, details: state.guardianDetails });
         console.log("Guardians saved to Firebase");
     } catch (error) {
-        console.error("Error saving guardians:", error);
+        handleFirestoreError(error, OperationType.WRITE, path);
     }
 }
 
 async function loadGuardiansFromFirebase() {
     if (!currentUser) return;
+    const path = `users/${currentUser.uid}/settings`;
     try {
         const querySnapshot = await getDocs(collection(db, `users/${currentUser.uid}/settings`));
         querySnapshot.forEach((doc) => {
@@ -215,12 +268,13 @@ async function loadGuardiansFromFirebase() {
             }
         });
     } catch (error) {
-        console.error("Error loading guardians:", error);
+        handleFirestoreError(error, OperationType.GET, path);
     }
 }
 
 async function loadDatasetsFromFirebase() {
     if (!currentUser) return;
+    const path = `users/${currentUser.uid}/datasets`;
     try {
         const querySnapshot = await getDocs(collection(db, `users/${currentUser.uid}/datasets`));
         const datasets: any[] = [];
@@ -241,17 +295,17 @@ async function loadDatasetsFromFirebase() {
         renderAll();
         showToast('تم استرجاع البيانات بنجاح', 'success');
     } catch (error) {
-        console.error("Error loading datasets:", error);
-        showToast('حدث خطأ أثناء استرجاع البيانات', 'error');
+        handleFirestoreError(error, OperationType.GET, path);
     }
 }
 
 async function deleteDatasetFromFirebase(datasetId: string) {
     if (!currentUser) return;
+    const path = `users/${currentUser.uid}/datasets/${datasetId}`;
     try {
         await deleteDoc(doc(db, `users/${currentUser.uid}/datasets`, datasetId));
     } catch (error) {
-        console.error("Error deleting dataset:", error);
+        handleFirestoreError(error, OperationType.DELETE, path);
     }
 }
 
