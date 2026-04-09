@@ -589,11 +589,7 @@
                         <div class="card p-5 fade-up"><h3 class="text-sm font-bold text-gray-700 mb-4"><i class="fa-solid fa-chart-pie text-red-500 ml-2"></i>توزيع الغيابات — <span id="chart-month-label3">—</span></h3><div class="chart-container" style="max-height:260px"><canvas id="pieChart"></canvas></div></div>
                         <div class="card p-5 fade-up" style="animation-delay:80ms"><h3 class="text-sm font-bold text-gray-700 mb-4"><i class="fa-solid fa-ranking-star text-purple-500 ml-2"></i>ترتيب التلاميذ — <span id="chart-month-label4">—</span></h3><div class="chart-container" style="max-height:260px"><canvas id="hBarChart"></canvas></div></div>
                     </div>
-                    <div class="card p-4 mb-5 flex flex-wrap items-center gap-3 no-print fade-up">
-                        <div class="relative flex-1 min-w-[200px]"><i class="fa-solid fa-magnifying-glass absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i><input type="text" id="search-input" class="search-input" placeholder="بحث بالاسم أو الرقم الوطني..." oninput="handleSearch(this.value)" aria-label="بحث"></div>
-                        <div class="flex gap-1 bg-gray-100 rounded-xl p-1"><button onclick="setViewMode('compact')" class="btn-ghost active text-sm rounded-lg" id="view-compact"><i class="fa-solid fa-list"></i> مختصر</button><button onclick="setViewMode('detailed')" class="btn-ghost text-sm rounded-lg" id="view-detailed"><i class="fa-solid fa-table-cells"></i> تفصيلي</button></div>
-                        <div class="flex gap-1 bg-gray-100 rounded-xl p-1"><button onclick="setSortMode('rank')" class="btn-ghost active text-sm rounded-lg" id="sort-rank">ترتيب</button><button onclick="setSortMode('absent')" class="btn-ghost text-sm rounded-lg" id="sort-absent">غياب</button></div>
-                    </div>
+
                     <!-- In-Content Ad -->
                     <div class="mb-6 no-print">
                         <div class="bg-gray-100 border border-dashed border-gray-300 rounded-xl py-4 flex items-center justify-center text-gray-400 text-xs overflow-hidden min-h-[90px] relative">
@@ -605,6 +601,12 @@
                                  data-full-width-responsive="true"></ins>
                             <span class="absolute">مساحة إعلانية (In-Content)</span>
                         </div>
+                    </div>
+
+                    <div class="card p-4 mb-5 flex flex-wrap items-center gap-3 no-print fade-up">
+                        <div class="relative flex-1 min-w-[200px]"><i class="fa-solid fa-magnifying-glass absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i><input type="text" id="search-input" class="search-input" placeholder="بحث بالاسم أو الرقم الوطني..." oninput="handleSearch(this.value)" aria-label="بحث"></div>
+                        <div class="flex gap-1 bg-gray-100 rounded-xl p-1"><button onclick="setViewMode('compact')" class="btn-ghost active text-sm rounded-lg" id="view-compact"><i class="fa-solid fa-list"></i> مختصر</button><button onclick="setViewMode('detailed')" class="btn-ghost text-sm rounded-lg" id="view-detailed"><i class="fa-solid fa-table-cells"></i> تفصيلي</button></div>
+                        <div class="flex gap-1 bg-gray-100 rounded-xl p-1"><button onclick="setSortMode('rank')" class="btn-ghost active text-sm rounded-lg" id="sort-rank">ترتيب</button><button onclick="setSortMode('absent')" class="btn-ghost text-sm rounded-lg" id="sort-absent">غياب</button></div>
                     </div>
 
                     <div class="card overflow-hidden mb-6 fade-up" id="table-card"><div class="overflow-x-auto" style="max-height:60vh;overflow-y:auto" id="table-scroll"><table class="abs-table" id="absence-table"><thead id="table-head"></thead><tbody id="table-body"></tbody></table></div><div id="table-footer" class="px-4 py-3 border-t border-gray-100 text-sm text-gray-500 flex items-center justify-between"></div></div>
