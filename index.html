@@ -12,6 +12,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script>tailwind.config={theme:{extend:{fontFamily:{cairo:['Cairo','sans-serif']}}}}</script>
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
     <style>
         :root{--bg:#F5F4EF;--card:#FFFFFF;--text:#16192C;--muted:#7C8298;--border:#E2E4EB;--primary:#059669;--primary-l:#10B981;--primary-d:#047857;--accent:#D97706;--danger:#DC2626}
         *{font-family:'Cairo',sans-serif;box-sizing:border-box}
@@ -481,6 +482,19 @@
         </div>
     </header>
 
+    <!-- Top Ad Banner -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 mt-6 no-print">
+        <div class="bg-gray-100 border border-dashed border-gray-300 rounded-xl py-4 flex items-center justify-center text-gray-400 text-xs overflow-hidden min-h-[90px]">
+            <ins class="adsbygoogle"
+                 style="display:block"
+                 data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
+                 data-ad-slot="XXXXXXXXXX"
+                 data-ad-format="auto"
+                 data-full-width-responsive="true"></ins>
+            <span class="absolute">مساحة إعلانية (Banner)</span>
+        </div>
+    </div>
+
     <main class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-8">
         <div id="auth-warning" class="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 mb-6 flex items-center gap-3 fade-up">
             <i class="fa-solid fa-triangle-exclamation text-amber-500 text-xl"></i>
@@ -545,6 +559,19 @@
                                 </div>
                             </div>
                         </div>
+                        
+                        <!-- Sidebar Ad -->
+                        <div class="mt-6 no-print">
+                            <div class="bg-gray-100 border border-dashed border-gray-300 rounded-xl py-8 flex items-center justify-center text-gray-400 text-xs overflow-hidden min-h-[250px] relative">
+                                <ins class="adsbygoogle"
+                                     style="display:block"
+                                     data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
+                                     data-ad-slot="XXXXXXXXXX"
+                                     data-ad-format="auto"
+                                     data-full-width-responsive="true"></ins>
+                                <span class="absolute">مساحة إعلانية (Sidebar)</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -567,6 +594,19 @@
                         <div class="flex gap-1 bg-gray-100 rounded-xl p-1"><button onclick="setViewMode('compact')" class="btn-ghost active text-sm rounded-lg" id="view-compact"><i class="fa-solid fa-list"></i> مختصر</button><button onclick="setViewMode('detailed')" class="btn-ghost text-sm rounded-lg" id="view-detailed"><i class="fa-solid fa-table-cells"></i> تفصيلي</button></div>
                         <div class="flex gap-1 bg-gray-100 rounded-xl p-1"><button onclick="setSortMode('rank')" class="btn-ghost active text-sm rounded-lg" id="sort-rank">ترتيب</button><button onclick="setSortMode('absent')" class="btn-ghost text-sm rounded-lg" id="sort-absent">غياب</button></div>
                     </div>
+                    <!-- In-Content Ad -->
+                    <div class="mb-6 no-print">
+                        <div class="bg-gray-100 border border-dashed border-gray-300 rounded-xl py-4 flex items-center justify-center text-gray-400 text-xs overflow-hidden min-h-[90px] relative">
+                            <ins class="adsbygoogle"
+                                 style="display:block"
+                                 data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
+                                 data-ad-slot="XXXXXXXXXX"
+                                 data-ad-format="auto"
+                                 data-full-width-responsive="true"></ins>
+                            <span class="absolute">مساحة إعلانية (In-Content)</span>
+                        </div>
+                    </div>
+
                     <div class="card overflow-hidden mb-6 fade-up" id="table-card"><div class="overflow-x-auto" style="max-height:60vh;overflow-y:auto" id="table-scroll"><table class="abs-table" id="absence-table"><thead id="table-head"></thead><tbody id="table-body"></tbody></table></div><div id="table-footer" class="px-4 py-3 border-t border-gray-100 text-sm text-gray-500 flex items-center justify-between"></div></div>
                     
                     <div class="card overflow-hidden mb-6 fade-up no-print" id="guardians-table-card" style="display:none">

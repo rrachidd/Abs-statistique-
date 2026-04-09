@@ -1,0 +1,51 @@
+{
+  "entities": {
+    "datasets": {
+      "title": "Dataset",
+      "description": "A collection of student absence records for a specific class and month.",
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "type": "object",
+          "description": "Metadata about the class and month."
+        },
+        "students": {
+          "type": "array",
+          "description": "List of students and their daily absence data."
+        },
+        "uid": {
+          "type": "string",
+          "description": "The owner's user ID."
+        }
+      },
+      "required": ["metadata", "students", "uid"]
+    },
+    "guardians": {
+      "title": "Guardian",
+      "description": "Guardian contact information for a student.",
+      "type": "object",
+      "properties": {
+        "studentId": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "uid": {
+          "type": "string"
+        }
+      },
+      "required": ["studentId", "phone", "uid"]
+    }
+  },
+  "firestore": {
+    "/datasets/{datasetId}": {
+      "schema": "datasets",
+      "description": "Absence datasets."
+    },
+    "/guardians/{guardianId}": {
+      "schema": "guardians",
+      "description": "Guardian contacts."
+    }
+  }
+}

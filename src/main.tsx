@@ -27,6 +27,29 @@ function updateReportPeriodDropdown() {
 let barChart: any = null, lineChart: any = null, pieChart: any = null, hBarChart: any = null, currentSheetStudentId: any = null;
 let currentUser: any = null;
 
+function initAds() {
+    try {
+        const adsbygoogle = (window as any).adsbygoogle;
+        if (!adsbygoogle) return;
+
+        // Find all ad slots that are visible and not yet initialized
+        const adSlots = document.querySelectorAll('ins.adsbygoogle:not([data-adsbygoogle-status="done"]):not([data-ad-initialized="true"])');
+        adSlots.forEach(slot => {
+            // Check if the slot or its parents are hidden
+            const style = window.getComputedStyle(slot);
+            if (style.display !== 'none' && slot.parentElement && window.getComputedStyle(slot.parentElement).display !== 'none') {
+                // Only push if it has width (prevents availableWidth=0)
+                if (slot.clientWidth > 0) {
+                    (slot as HTMLElement).setAttribute('data-ad-initialized', 'true');
+                    adsbygoogle.push({});
+                }
+            }
+        });
+    } catch (e) {
+        console.error("AdSense init error:", e);
+    }
+}
+
 function normCell(v: any){if(v===null||v===undefined||v==='')return'*';const s=String(v).trim();return(s==='*'||s===''||s.toLowerCase()==='null')?'*':s}
 function parseDayValue(v: any){const s=normCell(v);if(s==='*')return{type:'none',val:0};if(s==='0')return{type:'present',val:0};if(s.toUpperCase()==='X')return{type:'special',val:0};const n=parseFloat(s);return(!isNaN(n)&&n>0)?{type:'absent',val:n}:{type:'present',val:0}}
 function translateMonth(m: any){return(!m)?'غير محدد':(MONTH_NAMES[m.toLowerCase().trim() as keyof typeof MONTH_NAMES]||m)}
@@ -461,6 +484,10 @@ function renderAll(){
     if(btnPdf) btnPdf.style.display=has?'':'none';
     
     if(!has)return;
+
+    // Initialize ads for visible slots
+    setTimeout(initAds, 500);
+
     renderClassTabs();renderMonthTabs();renderClassInfo();renderStats();renderCharts();renderTable();updateReportPeriodDropdown();
 }
 
@@ -2707,6 +2734,9 @@ document.getElementById('confirm-modal-yes')?.addEventListener('click', () => {
 // Setup event listeners
 document.addEventListener('DOMContentLoaded', () => {
     setPersistence(auth, browserLocalPersistence).catch(console.error);
+    
+    // Initial ad check for visible slots (like Top Banner)
+    setTimeout(initAds, 1000);
     const uploadZone=document.getElementById('upload-zone');
     const fileInput=document.getElementById('file-input') as HTMLInputElement;
     const guardianFileInput=document.getElementById('guardian-file-input') as HTMLInputElement;

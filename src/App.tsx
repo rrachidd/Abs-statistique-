@@ -1,37 +1,25 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from './lib/supabase';
-import { Auth } from './components/Auth';
-import { TodoList } from './components/TodoList';
-import { FileStorage } from './components/FileStorage';
-import { Button } from '../components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { Toaster } from '../components/ui/sonner';
+import { auth, onAuthStateChanged, signOut } from './firebase';
+import { Button } from './components/ui/button';
+import { Toaster } from 'sonner';
 import { LogOut, Database, Shield, HardDrive, Github } from 'lucide-react';
 import { motion } from 'motion/react';
 
 function App() {
-  const [session, setSession] = useState<any>(null);
+  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check current session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
       setLoading(false);
     });
 
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
+    return () => unsubscribe();
   }, []);
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await signOut(auth);
   };
 
   if (loading) {
@@ -52,13 +40,13 @@ function App() {
             <div className="bg-primary p-1.5 rounded-lg">
               <Database className="w-5 h-5 text-primary-foreground" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight">Supabase Starter</h1>
+            <h1 className="text-xl font-bold tracking-tight">Firebase Absence Manager</h1>
           </div>
           
-          {session && (
+          {user && (
             <div className="flex items-center gap-4">
               <span className="text-sm text-muted-foreground hidden sm:inline-block">
-                {session.user.email}
+                {user.email}
               </span>
               <Button variant="outline" size="sm" onClick={handleSignOut}>
                 <LogOut className="w-4 h-4 mr-2" />
@@ -70,7 +58,7 @@ function App() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        {!session ? (
+        {!user ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -78,68 +66,43 @@ function App() {
           >
             <div className="text-center space-y-4">
               <h2 className="text-4xl font-extrabold tracking-tight sm:text-6xl">
-                The Open Source <span className="text-primary">Firebase Alternative</span>
+                School <span className="text-primary">Absence Manager</span>
               </h2>
               <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-                Build production-grade applications with a Postgres database, Authentication, 
-                Instant APIs, Edge Functions, Realtime subscriptions, and Storage.
+                Manage student absences, generate reports, and communicate with parents via WhatsApp.
               </p>
             </div>
 
-            <Auth />
+            <div className="flex justify-center">
+               <p className="text-muted-foreground">Please use the login button in the header or sidebar to continue.</p>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-12">
               <FeatureCard 
                 icon={<Shield className="w-6 h-6" />}
                 title="Authentication"
-                description="User management with social logins, magic links, and more."
+                description="Secure login with Google to keep your data safe."
               />
               <FeatureCard 
                 icon={<Database className="w-6 h-6" />}
-                title="Postgres Database"
-                description="Every project comes with a full Postgres database."
+                title="Cloud Storage"
+                description="Sync your datasets across devices automatically."
               />
               <FeatureCard 
                 icon={<HardDrive className="w-6 h-6" />}
-                title="Storage"
-                description="Store, organize, and serve large files like images and videos."
+                title="Local Persistence"
+                description="Work offline and sync when you're back online."
               />
             </div>
           </motion.div>
         ) : (
           <div className="max-w-4xl mx-auto space-y-8">
-            <Tabs defaultValue="todos" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-8">
-                <TabsTrigger value="todos" className="flex items-center gap-2">
-                  <Database className="w-4 h-4" />
-                  Database & Realtime
-                </TabsTrigger>
-                <TabsTrigger value="storage" className="flex items-center gap-2">
-                  <HardDrive className="w-4 h-4" />
-                  Storage
-                </TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="todos">
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <TodoList userId={session.user.id} />
-                </motion.div>
-              </TabsContent>
-              
-              <TabsContent value="storage">
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <FileStorage userId={session.user.id} />
-                </motion.div>
-              </TabsContent>
-            </Tabs>
+             <div className="bg-card border rounded-2xl p-8 text-center space-y-4">
+                <h3 className="text-2xl font-bold">Welcome back!</h3>
+                <p className="text-muted-foreground">
+                  Your data is being synced with Firebase. You can manage your classes and students in the main interface.
+                </p>
+             </div>
           </div>
         )}
       </main>
