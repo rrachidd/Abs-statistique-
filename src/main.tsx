@@ -991,13 +991,13 @@ function buildPrintArea(ds: any, single: any) {
 };
 
 (window as any).printAbsenceSheet = () => {
-    const sheets = document.querySelectorAll('[id^="absence-sheet-el"]');
+    const sheets = document.querySelectorAll('.absence-sheet');
     if (!sheets.length) return;
     const pa = document.getElementById('sheet-print-area');
     if(pa) {
         pa.innerHTML = Array.from(sheets).map(el => el.outerHTML).join('');
         pa.style.display = 'block';
-        (window as any).setPrintOrientation('landscape');
+        (window as any).setPrintOrientation('portrait');
         setTimeout(() => window.print(), 250);
     }
 };
@@ -1890,8 +1890,8 @@ let currentSummaryHtml = '';
     showToast('جارٍ إعداد PDF...', 'info', 5000);
     try {
         const { jsPDF } = (window as any).jspdf;
-        const pdf = new jsPDF('l', 'mm', 'a4');
-        const imgW = 297;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgW = 210;
 
         const canvas = await (window as any).html2canvas(sheet, {
             scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false,
@@ -1951,8 +1951,8 @@ let currentSummaryHtml = '';
 
         showToast('جارٍ إنشاء ملف PDF (قد يستغرق بعض الوقت)...', 'info', 10000);
         const { jsPDF } = (window as any).jspdf;
-        const pdf = new jsPDF('l', 'mm', 'a4');
-        const imgW = 297;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgW = 210;
 
         for (let i = 0; i < sheets.length; i++) {
             if (i > 0) pdf.addPage();

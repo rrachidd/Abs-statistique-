@@ -106,53 +106,50 @@
             background:#fff;
             width:190mm;
             height:277mm;
-            padding:6mm 7mm;
-            font-size:7.5pt;
+            padding:8mm 10mm;
+            font-size:8pt;
             color:#111;
-            line-height:1.35;
+            line-height:1.5;
             box-shadow:0 2px 20px rgba(0,0,0,.1);
             display:flex;
             flex-direction:column;
             overflow:hidden;
             flex-shrink:0;
-            font-family: Arial, Helvetica, sans-serif;
+            font-family: 'Cairo', Arial, sans-serif;
         }
         .absence-sheet * {
-            font-family: Arial, Helvetica, sans-serif !important;
+            font-family: 'Cairo', Arial, sans-serif !important;
+            box-sizing: border-box;
         }
-        .absence-sheet .sheet-hdr{text-align:center;padding:2px 0 3px;border:1.5px solid #111;line-height:1.4}
-        .absence-sheet .sheet-hdr h2{font-size:9pt;font-weight:900;margin:0;letter-spacing:.3px;font-family:Arial,sans-serif}
-        .absence-sheet .sheet-hdr h3{font-size:7.5pt;font-weight:600;margin:0;color:#222;font-family:Arial,sans-serif}
+        .absence-sheet .sheet-hdr{text-align:center;padding:4px 0;border:1.5px solid #111;line-height:1.6}
+        .absence-sheet .sheet-hdr h2{font-size:10pt;font-weight:900;margin:0;letter-spacing:.3px}
+        .absence-sheet .sheet-hdr h3{font-size:8.5pt;font-weight:600;margin:0;color:#222}
         .absence-sheet .info-grid{display:grid;grid-template-columns:repeat(3,1fr);border:1.5px solid #111;border-top:none}
-        .absence-sheet .info-cell{padding:2.5px 5px;border:1px solid #111;font-size:7pt;display:flex;align-items:center;gap:3px}
+        .absence-sheet .info-cell{padding:4px 6px;border:1px solid #111;font-size:8pt;display:flex;align-items:center;gap:4px;min-height:30px}
         .absence-sheet .info-cell .lbl{font-weight:800;white-space:nowrap}
-        .absence-sheet .info-cell .val{flex:1;text-align:right}
-        .absence-sheet .sheet-tbl{width:100%;border-collapse:collapse;table-layout:fixed}
-        .absence-sheet .sheet-tbl th,.absence-sheet .sheet-tbl td{border:.8px solid #111;padding:1.5px 1px;text-align:center;font-size:6.5pt;vertical-align:middle;overflow:hidden}
-        .absence-sheet .sheet-tbl th{background:#e2e2e2;font-weight:800;font-size:5.8pt;line-height:1.2;padding:2px 1px}
-        .absence-sheet .sheet-tbl .col-rank{width:4.5mm}
-        .absence-sheet .sheet-tbl .col-id{width:13mm}
-        .absence-sheet .sheet-tbl .col-fam{width:12mm}
-        .absence-sheet .sheet-tbl .col-name{width:15mm}
-        .absence-sheet .sheet-tbl .col-month{width:18mm}
-        .absence-sheet .sheet-tbl .col-day{width:3.6mm}
-        .absence-sheet .sheet-tbl .col-sum{width:5.5mm;background:#f0f0f0;font-weight:800}
-        .absence-sheet .sheet-tbl .col-s1{width:5.2mm;background:#fde8e8}
-        .absence-sheet .sheet-tbl .col-s2{width:5.2mm;background:#e0f5ec}
-        .absence-sheet .sheet-tbl .col-s3{width:5.2mm;background:#fde8e8}
-        .absence-sheet .sheet-tbl .col-s4{width:5.2mm;background:#e0f5ec}
-        .absence-sheet .sheet-tbl .sub-row th{font-size:5pt;padding:1px .5px;background:#ebebeb}
+        .absence-sheet .info-cell .val{flex:1;text-align:right;font-weight:600}
+        .absence-sheet .sheet-tbl{width:100%;border-collapse:collapse;table-layout:fixed;margin-top:2px}
+        .absence-sheet .sheet-tbl th,.absence-sheet .sheet-tbl td{border:1px solid #111;padding:3px 1px;text-align:center;font-size:7pt;vertical-align:middle}
+        .absence-sheet .sheet-tbl th{background:#f1f5f9;font-weight:800;font-size:6.5pt;line-height:1.4;padding:4px 1px}
+        .absence-sheet .sheet-tbl .col-month{width:22mm}
+        .absence-sheet .sheet-tbl .col-day{width:3.8mm}
+        .absence-sheet .sheet-tbl .col-sum{width:6.5mm;background:#f8fafc;font-weight:800}
+        .absence-sheet .sheet-tbl .col-s1{width:6mm;background:#fff1f2}
+        .absence-sheet .sheet-tbl .col-s2{width:6mm;background:#f0fdf4}
+        .absence-sheet .sheet-tbl .col-s3{width:6mm;background:#fff1f2}
+        .absence-sheet .sheet-tbl .col-s4{width:6mm;background:#f0fdf4}
+        .absence-sheet .sheet-tbl .sub-row th{font-size:5.5pt;padding:2px .5px;background:#f8fafc}
         .absence-sheet .sheet-tbl .abs-v{color:#dc2626;font-weight:800}
         .absence-sheet .sheet-tbl .zero-v{color:#059669}
         .absence-sheet .sheet-tbl .spec-v{color:#d97706;font-weight:700}
-        .absence-sheet .sheet-tbl .off-day{background:#f7f7f7;color:#ccc}
+        .absence-sheet .sheet-tbl .off-day{background:#f8fafc;color:#cbd5e1}
         .absence-sheet .ft-section{border:1.5px solid #111;border-top:none;margin-top:auto;flex-shrink:0}
-        .absence-sheet .ft-row{display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:.8px solid #111}
+        .absence-sheet .ft-row{display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #111}
         .absence-sheet .ft-row:last-child{border-bottom:none}
-        .absence-sheet .ft-cell{padding:3px 6px;font-size:6.5pt;min-height:22px;display:flex;flex-direction:column;gap:2px}
-        .absence-sheet .ft-cell:not(:last-child){border-left:.8px solid #111}
-        .absence-sheet .ft-cell .fl{font-weight:800;font-size:6.5pt}
-        .absence-sheet .ft-cell .fl-line{flex:1;border-bottom:.8px dotted #999;min-height:14px}
+        .absence-sheet .ft-cell{padding:6px 8px;font-size:7.5pt;min-height:35px;display:flex;flex-direction:column;gap:4px}
+        .absence-sheet .ft-cell:not(:last-child){border-left:1px solid #111}
+        .absence-sheet .ft-cell .fl{font-weight:800;font-size:7.5pt}
+        .absence-sheet .ft-cell .fl-line{flex:1;border-bottom:1px dotted #94a3b8;min-height:20px}
 
         /* ===== جدول ملخص الأشهر (اختياري في الورقة) ===== */
         .absence-sheet .month-summary-tbl{width:100%;border-collapse:collapse;margin-top:2px}
@@ -176,8 +173,8 @@
         @media print{
             body *{visibility:hidden!important}
             #sheet-print-area,#sheet-print-area *{visibility:visible!important}
-            #sheet-print-area{position:fixed;inset:0;background:#fff;z-index:99999;padding:0;margin:0}
-            #sheet-print-area .absence-sheet{box-shadow:none;width:100%;height:100vh;margin:0;padding:6mm 7mm;page-break-after:always}
+            #sheet-print-area{position:absolute;left:0;top:0;width:100%;background:#fff;z-index:99999;padding:0;margin:0}
+            #sheet-print-area .absence-sheet{box-shadow:none;width:210mm;height:297mm;margin:0;padding:10mm 12mm;page-break-after:always;border:none}
             #sheet-print-area .absence-sheet:last-child{page-break-after:auto}
             #sheet-print-area .sheet-page-break{display:none!important}
             .no-print{display:none!important}
