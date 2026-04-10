@@ -206,6 +206,68 @@
 </head>
 <body>
     <div id="toast-container" class="fixed top-5 left-5 z-[60] flex flex-col gap-3" aria-live="polite"></div>
+    
+    <div id="auth-modal" class="sheet-modal" onclick="if(event.target===this)closeAuthModal()">
+        <div class="sheet-modal-inner" style="max-width: 400px;">
+            <div class="sheet-modal-header no-print">
+                <div class="flex items-center gap-3 flex-1">
+                    <div class="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center"><i class="fa-solid fa-user-lock text-emerald-700"></i></div>
+                    <div><h3 class="font-bold text-sm text-gray-800">تسجيل الدخول</h3><p class="text-xs text-gray-400">الوصول إلى حسابك</p></div>
+                </div>
+                <button onclick="closeAuthModal()" class="btn-ghost rounded-xl w-9 h-9 flex items-center justify-center"><i class="fa-solid fa-xmark text-gray-400"></i></button>
+            </div>
+            <div class="sheet-modal-body p-6">
+                <div id="auth-forms" class="w-full">
+                    <!-- Login Form -->
+                    <div id="login-form">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-600 mb-1">البريد الإلكتروني</label>
+                                <input type="email" id="login-email" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" placeholder="example@mail.com">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-600 mb-1">كلمة المرور</label>
+                                <input type="password" id="login-password" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" placeholder="••••••••">
+                            </div>
+                            <button onclick="handleEmailLogin()" class="btn btn-primary w-full justify-center py-2.5">دخول</button>
+                            
+                            <div class="relative py-2">
+                                <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-200"></div></div>
+                                <div class="relative flex justify-center text-xs uppercase"><span class="bg-white px-2 text-gray-400">أو</span></div>
+                            </div>
+                            
+                            <button onclick="handleGoogleLogin()" class="btn btn-outline w-full justify-center py-2.5 border-gray-200 text-gray-700 hover:bg-gray-50">
+                                <i class="fa-brands fa-google text-red-500"></i> الدخول عبر Google
+                            </button>
+                            
+                            <p class="text-center text-xs text-gray-500 mt-4">
+                                ليس لديك حساب؟ <button onclick="toggleAuthForm('signup')" class="text-emerald-600 font-bold hover:underline">إنشاء حساب جديد</button>
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Signup Form -->
+                    <div id="signup-form" style="display:none">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-600 mb-1">البريد الإلكتروني</label>
+                                <input type="email" id="signup-email" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" placeholder="example@mail.com">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-600 mb-1">كلمة المرور</label>
+                                <input type="password" id="signup-password" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" placeholder="••••••••">
+                            </div>
+                            <button onclick="handleEmailSignup()" class="btn btn-primary w-full justify-center py-2.5">إنشاء حساب</button>
+                            
+                            <p class="text-center text-xs text-gray-500 mt-4">
+                                لديك حساب بالفعل؟ <button onclick="toggleAuthForm('login')" class="text-emerald-600 font-bold hover:underline">تسجيل الدخول</button>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     <div id="panel-overlay" class="panel-overlay" onclick="closeDetailPanel()"></div>
     <aside id="detail-panel" class="detail-panel" role="dialog" aria-label="تفاصيل التلميذ"><div id="panel-content" class="p-6"></div></aside>
 
@@ -466,7 +528,7 @@
             <div class="flex items-center gap-2 no-print">
                 <button onclick="openGuideModal()" class="btn bg-white/10 hover:bg-white/20 text-white text-sm backdrop-blur"><i class="fa-solid fa-circle-question"></i><span class="hidden sm:inline"> دليل الاستعمال</span></button>
                 <div id="auth-container" class="flex items-center gap-2">
-                    <button id="btn-login" class="btn bg-white/10 hover:bg-white/20 text-white text-sm backdrop-blur"><i class="fa-brands fa-google"></i> تسجيل الدخول</button>
+                    <button id="btn-login-trigger" onclick="openAuthModal()" class="btn bg-white/10 hover:bg-white/20 text-white text-sm backdrop-blur"><i class="fa-solid fa-right-to-bracket"></i> تسجيل الدخول</button>
                     <div id="user-info" style="display:none" class="flex items-center gap-2">
                         <img id="user-avatar" src="" alt="User" class="w-8 h-8 rounded-full border border-white/20">
                         <span id="user-name" class="text-sm font-medium hidden sm:inline"></span>

@@ -1,5 +1,5 @@
 import './index.css';
-import { auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, collection, doc, setDoc, getDocs, deleteDoc, setPersistence, browserLocalPersistence } from './firebase';
+import { auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, collection, doc, setDoc, getDocs, deleteDoc, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword } from './firebase';
 import { GoogleGenAI } from '@google/genai';
 import { marked } from 'marked';
 
@@ -2822,7 +2822,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') { (window as any).closeDetailPanel(); (window as any).closeSheetModal(); (window as any).closeModal('about-modal'); (window as any).closeModal('privacy-modal'); (window as any).closeModal('terms-modal'); } });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { (window as any).closeDetailPanel(); (window as any).closeSheetModal(); (window as any).closeModal('about-modal'); (window as any).closeModal('privacy-modal'); (window as any).closeModal('terms-modal'); (window as any).closeAuthModal(); } });
     
     (window as any).openModal = (id: string) => {
         const m = document.getElementById(id);
@@ -2832,6 +2832,80 @@ document.addEventListener('DOMContentLoaded', () => {
     (window as any).closeModal = (id: string) => {
         const m = document.getElementById(id);
         if (m) m.classList.remove('open');
+    };
+
+    (window as any).openAuthModal = () => {
+        (window as any).openModal('auth-modal');
+    };
+
+    (window as any).closeAuthModal = () => {
+        (window as any).closeModal('auth-modal');
+    };
+
+    (window as any).toggleAuthForm = (form: 'login' | 'signup') => {
+        const loginForm = document.getElementById('login-form');
+        const signupForm = document.getElementById('signup-form');
+        if (loginForm && signupForm) {
+            if (form === 'login') {
+                loginForm.style.display = 'block';
+                signupForm.style.display = 'none';
+            } else {
+                loginForm.style.display = 'none';
+                signupForm.style.display = 'block';
+            }
+        }
+    };
+
+    (window as any).handleGoogleLogin = async () => {
+        try {
+            await signInWithPopup(auth, googleProvider);
+            (window as any).closeAuthModal();
+        } catch (error) {
+            console.error("Google login error", error);
+            showToast('فشل تسجيل الدخول عبر Google', 'error');
+        }
+    };
+
+    (window as any).handleEmailLogin = async () => {
+        const email = (document.getElementById('login-email') as HTMLInputElement).value;
+        const password = (document.getElementById('login-password') as HTMLInputElement).value;
+        if (!email || !password) {
+            showToast('يرجى إدخال البريد الإلكتروني وكلمة المرور', 'error');
+            return;
+        }
+        try {
+            await signInWithEmailAndPassword(auth, email, password);
+            (window as any).closeAuthModal();
+        } catch (error: any) {
+            console.error("Email login error", error);
+            let msg = 'فشل تسجيل الدخول';
+            if (error.code === 'auth/user-not-found') msg = 'المستخدم غير موجود';
+            else if (error.code === 'auth/wrong-password') msg = 'كلمة المرور خاطئة';
+            showToast(msg, 'error');
+        }
+    };
+
+    (window as any).handleEmailSignup = async () => {
+        const email = (document.getElementById('signup-email') as HTMLInputElement).value;
+        const password = (document.getElementById('signup-password') as HTMLInputElement).value;
+        if (!email || !password) {
+            showToast('يرجى إدخال البريد الإلكتروني وكلمة المرور', 'error');
+            return;
+        }
+        if (password.length < 6) {
+            showToast('كلمة المرور يجب أن تكون 6 أحرف على الأقل', 'error');
+            return;
+        }
+        try {
+            await createUserWithEmailAndPassword(auth, email, password);
+            showToast('تم إنشاء الحساب بنجاح', 'success');
+            (window as any).closeAuthModal();
+        } catch (error: any) {
+            console.error("Signup error", error);
+            let msg = 'فشل إنشاء الحساب';
+            if (error.code === 'auth/email-already-in-use') msg = 'البريد الإلكتروني مستخدم بالفعل';
+            showToast(msg, 'error');
+        }
     };
 
     window.addEventListener('afterprint', () => { 
@@ -2878,7 +2952,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     onAuthStateChanged(auth, async (user) => {
         currentUser = user;
-        const btnLogin = document.getElementById('btn-login');
+        const btnLoginTrigger = document.getElementById('btn-login-trigger');
         const userInfo = document.getElementById('user-info');
         const userName = document.getElementById('user-name');
         const userAvatar = document.getElementById('user-avatar') as HTMLImageElement;
@@ -2887,20 +2961,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (user) {
             localStorage.setItem('absence_user_cache', JSON.stringify({
                 uid: user.uid,
-                displayName: user.displayName,
+                displayName: user.displayName || user.email?.split('@')[0],
                 photoURL: user.photoURL
             }));
-            if (btnLogin) btnLogin.style.display = 'none';
+            if (btnLoginTrigger) btnLoginTrigger.style.display = 'none';
             if (userInfo) userInfo.style.display = 'flex';
-            if (userName) userName.textContent = user.displayName || 'مستخدم';
-            if (userAvatar) userAvatar.src = user.photoURL || '';
+            if (userName) userName.textContent = user.displayName || user.email?.split('@')[0] || 'مستخدم';
+            if (userAvatar) userAvatar.src = user.photoURL || `https://ui-avatars.com/api/?name=${user.email}&background=random`;
             if (authWarning) authWarning.style.display = 'none';
             
             await loadGuardiansFromFirebase();
             await loadDatasetsFromFirebase();
         } else {
             localStorage.removeItem('absence_user_cache');
-            if (btnLogin) btnLogin.style.display = 'inline-flex';
+            if (btnLoginTrigger) btnLoginTrigger.style.display = 'inline-flex';
             if (userInfo) userInfo.style.display = 'none';
             if (authWarning) {
                 if (state.datasets.length > 0) {
