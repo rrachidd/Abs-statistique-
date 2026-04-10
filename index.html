@@ -926,24 +926,110 @@
 
     <!-- Privacy Policy Modal -->
     <div id="privacy-modal" class="sheet-modal">
-        <div class="sheet-modal-inner max-w-2xl">
-            <div class="sheet-modal-header bg-emerald-50">
-                <i class="fa-solid fa-shield-halved text-emerald-600"></i>
-                <h3 class="font-bold text-emerald-800">سياسة الخصوصية</h3>
-                <button onclick="closeModal('privacy-modal')" class="mr-auto text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+        <div class="sheet-modal-inner max-w-4xl">
+            <div class="sheet-modal-header bg-emerald-50 border-b border-emerald-100">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-lg shadow-emerald-200">
+                        <i class="fa-solid fa-user-shield"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-emerald-900">سياسة الخصوصية</h3>
+                        <p class="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">آخر تحديث: أبريل 2026</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('privacy-modal')" class="mr-auto text-gray-400 hover:text-gray-600 transition-colors"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="sheet-modal-body p-8 text-right leading-relaxed text-gray-700">
-                <h4 class="text-lg font-bold text-emerald-700 mb-4">1. حماية البيانات</h4>
-                <p class="mb-4 text-sm">نحن نولي أهمية قصوى لخصوصية بياناتكم. جميع الملفات التي يتم رفعها على الموقع تتم معالجتها محلياً في متصفحكم ولا يتم تخزين محتواها (أسماء التلاميذ، أرقام مسار) في خوادمنا إلا إذا اخترتم تسجيل الدخول واستخدام خاصية المزامنة السحابية.</p>
-                
-                <h4 class="text-lg font-bold text-emerald-700 mb-4">2. ملفات تعريف الارتباط (Cookies)</h4>
-                <p class="mb-4 text-sm">نستخدم ملفات تعريف الارتباط لتحسين تجربة المستخدم، ولأغراض إعلانية عبر Google AdSense. تساعدنا هذه الملفات في عرض إعلانات مخصصة بناءً على زياراتكم السابقة لموقعنا أو لمواقع أخرى.</p>
-                
-                <h4 class="text-lg font-bold text-emerald-700 mb-4">3. إعلانات Google AdSense</h4>
-                <p class="mb-4 text-sm">يستخدم الموقع طرفاً ثالثاً (Google) لعرض الإعلانات. تستخدم Google ملفات تعريف الارتباط لعرض إعلانات للمستخدمين استناداً إلى زياراتهم لموقعنا. يمكن للمستخدمين اختيار تعطيل استخدام ملف تعريف الارتباط DART بزيارة سياسة الخصوصية الخاصة بإعلانات Google وشبكة المحتوى.</p>
-                
-                <h4 class="text-lg font-bold text-emerald-700 mb-4">4. التغييرات في سياسة الخصوصية</h4>
-                <p class="text-sm">قد نقوم بتحديث سياسة الخصوصية من وقت لآخر. ننصحكم بمراجعة هذه الصفحة بشكل دوري.</p>
+            <div class="sheet-modal-body p-0 bg-white">
+                <div class="p-8 md:p-10">
+                    <div class="max-w-3xl mx-auto">
+                        <p class="text-gray-600 mb-10 leading-relaxed text-center italic">
+                            تعتبر خصوصية زوارنا في "نظام إدارة الغيابات المدرسية" ذات أهمية بالغة بالنسبة لنا. توضح وثيقة سياسة الخصوصية هذه أنواع المعلومات الشخصية التي يتم استلامها وجمعها وكيفية استخدامها.
+                        </p>
+
+                        <div class="space-y-12 text-right">
+                            <!-- Section 1 -->
+                            <section>
+                                <h4 class="text-xl font-bold text-gray-900 mb-4 flex items-center gap-3">
+                                    <span class="w-2 h-8 bg-emerald-500 rounded-full"></span>
+                                    1. المعلومات التي نجمعها
+                                </h4>
+                                <div class="bg-gray-50 p-6 rounded-2xl border border-gray-100">
+                                    <p class="text-gray-600 text-sm leading-relaxed mb-4">
+                                        عند استخدامكم لموقعنا (https://absencees.netlify.app/)، قد نقوم بجمع المعلومات التالية:
+                                    </p>
+                                    <ul class="list-disc list-inside text-gray-600 text-sm space-y-2 mr-4">
+                                        <li>معلومات الحساب: البريد الإلكتروني والاسم عند التسجيل عبر Google أو البريد الإلكتروني.</li>
+                                        <li>بيانات الاستخدام: معلومات حول كيفية تفاعلك مع الموقع (عبر ملفات تعريف الارتباط).</li>
+                                        <li>الملفات المرفوعة: تتم معالجة ملفات Excel محلياً، ولا يتم تخزينها في خوادمنا إلا في حال تفعيل المزامنة السحابية الاختيارية.</li>
+                                    </ul>
+                                </div>
+                            </section>
+
+                            <!-- Section 2: Cookies & AdSense -->
+                            <section>
+                                <h4 class="text-xl font-bold text-gray-900 mb-4 flex items-center gap-3">
+                                    <span class="w-2 h-8 bg-emerald-500 rounded-full"></span>
+                                    2. ملفات تعريف الارتباط (Cookies) وإعلانات Google
+                                </h4>
+                                <div class="space-y-4">
+                                    <p class="text-gray-600 text-sm leading-relaxed">
+                                        نحن نستخدم ملفات تعريف الارتباط لتخزين المعلومات حول تفضيلات الزوار، وتسجيل معلومات محددة عن المستخدم حول الصفحات التي يزورها.
+                                    </p>
+                                    <div class="bg-amber-50 p-6 rounded-2xl border border-amber-100">
+                                        <h5 class="font-bold text-amber-900 mb-2 text-sm">إعلانات Google AdSense:</h5>
+                                        <p class="text-amber-800 text-xs leading-relaxed">
+                                            تستخدم Google، كطرف ثالث، ملفات تعريف الارتباط لعرض الإعلانات على موقعنا. استخدام Google لملف تعريف الارتباط DART يتيح لها عرض الإعلانات للمستخدمين استناداً إلى زيارتهم لموقعنا والمواقع الأخرى على الإنترنت. يمكن للمستخدمين اختيار تعطيل استخدام ملف تعريف الارتباط DART من خلال زيارة سياسة الخصوصية الخاصة بإعلانات Google وشبكة المحتوى.
+                                        </p>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <!-- Section 3: GDPR & CCPA -->
+                            <section>
+                                <h4 class="text-xl font-bold text-gray-900 mb-4 flex items-center gap-3">
+                                    <span class="w-2 h-8 bg-emerald-500 rounded-full"></span>
+                                    3. حقوق حماية البيانات (GDPR & CCPA)
+                                </h4>
+                                <p class="text-gray-600 text-sm leading-relaxed mb-4">
+                                    بموجب اللائحة العامة لحماية البيانات (GDPR) وقانون خصوصية المستهلك في كاليفورنيا (CCPA)، يحق لك:
+                                </p>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="p-4 border border-gray-100 rounded-xl bg-white shadow-sm">
+                                        <p class="font-bold text-gray-800 text-xs mb-1">حق الوصول</p>
+                                        <p class="text-gray-500 text-[11px]">طلب نسخة من بياناتك الشخصية التي نحتفظ بها.</p>
+                                    </div>
+                                    <div class="p-4 border border-gray-100 rounded-xl bg-white shadow-sm">
+                                        <p class="font-bold text-gray-800 text-xs mb-1">حق الحذف</p>
+                                        <p class="text-gray-500 text-[11px]">طلب مسح بياناتك الشخصية من أنظمتنا في أي وقت.</p>
+                                    </div>
+                                    <div class="p-4 border border-gray-100 rounded-xl bg-white shadow-sm">
+                                        <p class="font-bold text-gray-800 text-xs mb-1">حق التصحيح</p>
+                                        <p class="text-gray-500 text-[11px]">طلب تعديل أي معلومات تعتقد أنها غير دقيقة.</p>
+                                    </div>
+                                    <div class="p-4 border border-gray-100 rounded-xl bg-white shadow-sm">
+                                        <p class="font-bold text-gray-800 text-xs mb-1">الاعتراض على المعالجة</p>
+                                        <p class="text-gray-500 text-[11px]">حق الاعتراض على معالجة بياناتك لأغراض معينة.</p>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <!-- Section 4 -->
+                            <section>
+                                <h4 class="text-xl font-bold text-gray-900 mb-4 flex items-center gap-3">
+                                    <span class="w-2 h-8 bg-emerald-500 rounded-full"></span>
+                                    4. التواصل معنا
+                                </h4>
+                                <p class="text-gray-600 text-sm leading-relaxed">
+                                    إذا كان لديك أي أسئلة حول سياسة الخصوصية هذه، أو ممارسات هذا الموقع، يرجى التواصل معنا عبر البريد الإلكتروني المخصص للخصوصية:
+                                    <a href="mailto:rrachidv4@gmail.com" class="text-emerald-600 font-bold hover:underline">rrachidv4@gmail.com</a>
+                                </p>
+                            </section>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="sheet-modal-footer bg-gray-50 border-t border-gray-100 p-6 flex justify-center">
+                <button onclick="closeModal('privacy-modal')" class="btn btn-primary px-12 py-3 rounded-xl shadow-lg shadow-emerald-200">أوافق على السياسة</button>
             </div>
         </div>
     </div>
