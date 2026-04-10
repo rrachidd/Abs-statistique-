@@ -721,6 +721,7 @@
                             <div class="flex flex-col items-center md:items-start gap-4">
                                 <div class="flex flex-wrap justify-center gap-6 text-sm font-semibold text-gray-600">
                                     <button onclick="openModal('about-modal')" class="hover:text-emerald-600 transition-colors">من نحن</button>
+                                    <button onclick="openModal('contact-modal')" class="hover:text-emerald-600 transition-colors">اتصل بنا</button>
                                     <button onclick="openModal('privacy-modal')" class="hover:text-emerald-600 transition-colors">سياسة الخصوصية</button>
                                     <button onclick="openModal('terms-modal')" class="hover:text-emerald-600 transition-colors">اتفاقية الاستخدام</button>
                                 </div>
@@ -743,19 +744,182 @@
     <div id="print-area" style="display:none"></div>
     <div id="sheet-print-area" style="display:none"></div>
 
+    <!-- Contact Us Modal -->
+    <div id="contact-modal" class="sheet-modal">
+        <div class="sheet-modal-inner max-w-4xl">
+            <div class="sheet-modal-header bg-emerald-50">
+                <i class="fa-solid fa-envelope-open-text text-emerald-600"></i>
+                <h3 class="font-bold text-emerald-800">اتصل بنا</h3>
+                <button onclick="closeModal('contact-modal')" class="mr-auto text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="sheet-modal-body p-0">
+                <div class="grid grid-cols-1 md:grid-cols-2 w-full">
+                    <!-- Contact Info Section -->
+                    <div class="p-8 bg-emerald-900 text-white">
+                        <h4 class="text-xl font-bold mb-6">معلومات التواصل</h4>
+                        <p class="text-emerald-100 text-sm mb-8 leading-relaxed">
+                            نحن هنا لمساعدتكم. إذا كان لديكم أي استفسار حول نظام إدارة الغيابات المدرسية أو واجهتم أي مشكلة تقنية، فلا تترددوا في التواصل معنا. فريقنا متاح دائماً لتقديم الدعم اللازم وضمان أفضل تجربة مستخدم لكم.
+                        </p>
+                        
+                        <div class="space-y-6">
+                            <div class="flex items-start gap-4">
+                                <div class="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
+                                    <i class="fa-solid fa-envelope text-emerald-400"></i>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-emerald-300 font-bold uppercase tracking-wider">البريد الإلكتروني</p>
+                                    <p class="text-sm font-medium">rrachidv4@gmail.com</p>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-start gap-4">
+                                <div class="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
+                                    <i class="fa-solid fa-clock text-emerald-400"></i>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-emerald-300 font-bold uppercase tracking-wider">ساعات العمل</p>
+                                    <p class="text-sm font-medium">متاحون على مدار الساعة (24/7)</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-12">
+                            <p class="text-xs text-emerald-300 font-bold uppercase tracking-wider mb-4">تابعنا على</p>
+                            <div class="flex gap-4">
+                                <a href="#" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-emerald-600 transition-all"><i class="fa-brands fa-facebook-f"></i></a>
+                                <a href="#" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-emerald-600 transition-all"><i class="fa-brands fa-x-twitter"></i></a>
+                                <a href="#" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-emerald-600 transition-all"><i class="fa-brands fa-youtube"></i></a>
+                                <a href="#" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-emerald-600 transition-all"><i class="fa-brands fa-instagram"></i></a>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Contact Form Section -->
+                    <div class="p-8 bg-white">
+                        <h4 class="text-xl font-bold text-gray-800 mb-6">أرسل لنا رسالة</h4>
+                        <form id="contact-form" onsubmit="event.preventDefault(); handleContactSubmit();" class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-600 mb-1">الاسم الكامل</label>
+                                <input type="text" required class="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all outline-none" placeholder="أدخل اسمك هنا">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-600 mb-1">البريد الإلكتروني</label>
+                                <input type="email" required class="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all outline-none" placeholder="email@example.com">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-600 mb-1">الموضوع</label>
+                                <input type="text" required class="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all outline-none" placeholder="كيف يمكننا مساعدتك؟">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-600 mb-1">الرسالة</label>
+                                <textarea required rows="4" class="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all outline-none resize-none" placeholder="اكتب رسالتك هنا..."></textarea>
+                            </div>
+                            <button type="submit" class="w-full btn btn-primary justify-center py-3 rounded-xl shadow-lg shadow-emerald-200 hover:shadow-emerald-300 transform hover:-translate-y-0.5 transition-all">
+                                <i class="fa-solid fa-paper-plane"></i> إرسال الرسالة
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- About Us Modal -->
     <div id="about-modal" class="sheet-modal">
-        <div class="sheet-modal-inner max-w-2xl">
-            <div class="sheet-modal-header bg-emerald-50">
-                <i class="fa-solid fa-circle-info text-emerald-600"></i>
-                <h3 class="font-bold text-emerald-800">من نحن</h3>
-                <button onclick="closeModal('about-modal')" class="mr-auto text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+        <div class="sheet-modal-inner max-w-4xl">
+            <div class="sheet-modal-header bg-emerald-50 border-b border-emerald-100">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-lg shadow-emerald-200">
+                        <i class="fa-solid fa-school"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-emerald-900">من نحن</h3>
+                        <p class="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">نظام إدارة الغيابات المدرسية</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('about-modal')" class="mr-auto text-gray-400 hover:text-gray-600 transition-colors"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="sheet-modal-body p-8 text-right leading-relaxed text-gray-700">
-                <h4 class="text-xl font-bold text-emerald-700 mb-4">مرحباً بكم في نظام إدارة الغيابات المدرسية</h4>
-                <p class="mb-4">نحن فريق من المطورين والمهتمين بالشأن التربوي، نسعى لتوفير أدوات رقمية بسيطة وفعالة تساعد الأطر التربوية في مهامهم اليومية.</p>
-                <p class="mb-4">هذا الموقع تم تطويره ليكون أداة مساعدة للأستاذ(ة) في تدبير غيابات التلاميذ، من خلال تحويل ملفات "مسار" إلى تقارير ورسوم بيانية سهلة القراءة، بالإضافة إلى تسهيل التواصل مع أولياء الأمور.</p>
-                <p>هدفنا هو رقمنة العمليات الإدارية البسيطة لربح الوقت والجهد والتركيز على العملية التعليمية التعلمية.</p>
+            <div class="sheet-modal-body p-0 bg-gray-50/30">
+                <!-- Hero Section -->
+                <div class="p-8 md:p-12 bg-white border-b border-gray-100">
+                    <div class="max-w-3xl mx-auto text-center">
+                        <h4 class="text-2xl md:text-3xl font-black text-gray-900 mb-6 leading-tight">شريككم التقني في بناء بيئة تعليمية منظمة ومنضبطة</h4>
+                        <p class="text-gray-600 leading-relaxed text-lg mb-8">
+                            انطلق "نظام إدارة الغيابات المدرسية" من رؤية طموحة تهدف إلى رقمنة العمل الإداري التربوي، وتحويل التحديات اليومية التي تواجه الإدارة في تتبع غيابات التلاميذ إلى عملية سلسة، دقيقة، وذكية. نحن نؤمن أن التكنولوجيا هي المفتاح لرفع كفاءة المؤسسات التعليمية وتوفير وقت الأطر التربوية للتركيز على ما هو أهم: **بناء الأجيال.**
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Mission, Vision, Why Us Cards -->
+                <div class="p-8 md:p-12">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <!-- Mission -->
+                        <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all group">
+                            <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-6 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                <i class="fa-solid fa-bullseye text-xl"></i>
+                            </div>
+                            <h5 class="font-bold text-gray-900 mb-4 text-lg">مهمتنا</h5>
+                            <p class="text-sm text-gray-500 leading-relaxed">
+                                توفير أدوات تقنية متطورة وسهلة الاستخدام تساعد الإدارة التربوية على ضبط الحضور والغياب بدقة، وتوليد تقارير تحليلية فورية تدعم اتخاذ القرار.
+                            </p>
+                        </div>
+
+                        <!-- Vision -->
+                        <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all group">
+                            <div class="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center mb-6 group-hover:bg-purple-600 group-hover:text-white transition-all">
+                                <i class="fa-solid fa-eye text-xl"></i>
+                            </div>
+                            <h5 class="font-bold text-gray-900 mb-4 text-lg">رؤيتنا</h5>
+                            <p class="text-sm text-gray-500 leading-relaxed">
+                                أن نكون المنصة الرائدة والأكثر موثوقية في رقمنة المؤسسات التعليمية، مساهمين في خلق بيئة مدرسية تتسم بالشفافية والانضباط التام.
+                            </p>
+                        </div>
+
+                        <!-- Why Us -->
+                        <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all group">
+                            <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-6 group-hover:bg-emerald-600 group-hover:text-white transition-all">
+                                <i class="fa-solid fa-award text-xl"></i>
+                            </div>
+                            <h5 class="font-bold text-gray-900 mb-4 text-lg">لماذا نحن؟</h5>
+                            <p class="text-sm text-gray-500 leading-relaxed">
+                                نتميز بالبساطة المتناهية في التصميم، السرعة في معالجة البيانات الضخمة، والالتزام التام بحماية خصوصية البيانات وتوفير دعم فني مستمر.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Story Section -->
+                    <div class="mt-16 bg-emerald-900 rounded-3xl p-8 md:p-12 text-white relative overflow-hidden">
+                        <div class="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
+                        <div class="relative z-10 flex flex-col md:flex-row items-center gap-12">
+                            <div class="flex-1">
+                                <h4 class="text-2xl font-bold mb-6 flex items-center gap-3">
+                                    <span class="w-8 h-1 bg-emerald-400"></span> قصة الشغف
+                                </h4>
+                                <p class="text-emerald-100 leading-relaxed mb-6">
+                                    بدأت رحلتنا من قلب المؤسسة التعليمية، حيث لاحظنا الهدر الكبير في الوقت والجهد الناتج عن الاعتماد على السجلات الورقية التقليدية. كان السؤال: "كيف يمكننا تحويل هذه الساعات من العمل اليدوي المرهق إلى ثوانٍ من الدقة الرقمية؟"
+                                </p>
+                                <p class="text-emerald-100 leading-relaxed">
+                                    من هنا وُلد "نظام إدارة الغيابات المدرسية"، ليكون ثمرة دمج الخبرة التربوية العميقة مع أحدث تقنيات تطوير الويب، مقدمين حلاً يخدم الإدارة، الأستاذ، والتلميذ على حد سواء.
+                                </p>
+                            </div>
+                            <div class="w-full md:w-1/3 flex justify-center">
+                                <div class="relative">
+                                    <div class="w-48 h-48 rounded-full border-4 border-emerald-400/30 flex items-center justify-center p-4">
+                                        <div class="w-full h-full rounded-full bg-emerald-800 flex items-center justify-center text-5xl text-emerald-400">
+                                            <i class="fa-solid fa-rocket"></i>
+                                        </div>
+                                    </div>
+                                    <div class="absolute -bottom-4 -right-4 bg-white text-emerald-900 px-6 py-2 rounded-full font-black text-sm shadow-xl">
+                                        منذ 2026
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="sheet-modal-footer bg-gray-50 border-t border-gray-100 p-6 flex justify-center">
+                <button onclick="closeModal('about-modal')" class="btn btn-primary px-12 py-3 rounded-xl shadow-lg shadow-emerald-200">شكراً لثقتكم بنا</button>
             </div>
         </div>
     </div>

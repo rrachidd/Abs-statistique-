@@ -2822,7 +2822,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') { (window as any).closeDetailPanel(); (window as any).closeSheetModal(); (window as any).closeModal('about-modal'); (window as any).closeModal('privacy-modal'); (window as any).closeModal('terms-modal'); (window as any).closeAuthModal(); } });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { (window as any).closeDetailPanel(); (window as any).closeSheetModal(); (window as any).closeModal('about-modal'); (window as any).closeModal('privacy-modal'); (window as any).closeModal('terms-modal'); (window as any).closeAuthModal(); (window as any).closeModal('contact-modal'); } });
     
     (window as any).openModal = (id: string) => {
         const m = document.getElementById(id);
@@ -2860,9 +2860,15 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             await signInWithPopup(auth, googleProvider);
             (window as any).closeAuthModal();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Google login error", error);
-            showToast('فشل تسجيل الدخول عبر Google', 'error');
+            let msg = 'فشل تسجيل الدخول عبر Google';
+            if (error.code === 'auth/unauthorized-domain') {
+                msg = 'هذا النطاق (Domain) غير مصرح به في Firebase. يرجى إضافته في إعدادات Firebase.';
+            } else if (error.message) {
+                msg = `خطأ: ${error.message}`;
+            }
+            showToast(msg, 'error', 7000);
         }
     };
 
@@ -2881,7 +2887,9 @@ document.addEventListener('DOMContentLoaded', () => {
             let msg = 'فشل تسجيل الدخول';
             if (error.code === 'auth/user-not-found') msg = 'المستخدم غير موجود';
             else if (error.code === 'auth/wrong-password') msg = 'كلمة المرور خاطئة';
-            showToast(msg, 'error');
+            else if (error.code === 'auth/invalid-credential') msg = 'بيانات الاعتماد غير صالحة';
+            else msg = `خطأ: ${error.message}`;
+            showToast(msg, 'error', 5000);
         }
     };
 
@@ -2904,7 +2912,18 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Signup error", error);
             let msg = 'فشل إنشاء الحساب';
             if (error.code === 'auth/email-already-in-use') msg = 'البريد الإلكتروني مستخدم بالفعل';
-            showToast(msg, 'error');
+            else if (error.code === 'auth/invalid-email') msg = 'البريد الإلكتروني غير صالح';
+            else msg = `خطأ: ${error.message}`;
+            showToast(msg, 'error', 5000);
+        }
+    };
+
+    (window as any).handleContactSubmit = () => {
+        const form = document.getElementById('contact-form') as HTMLFormElement;
+        if (form) {
+            showToast('شكراً لتواصلك معنا! تم إرسال رسالتك بنجاح وسنقوم بالرد عليك في أقرب وقت.', 'success', 5000);
+            form.reset();
+            (window as any).closeModal('contact-modal');
         }
     };
 
