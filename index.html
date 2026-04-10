@@ -652,12 +652,102 @@
                     </div>
 
                     <div id="no-results" class="text-center py-16" style="display:none"><i class="fa-solid fa-face-meh text-5xl text-gray-300 mb-4"></i><p class="text-gray-500 font-semibold">لا توجد نتائج مطابقة</p></div>
+                    
+                    <footer class="mt-12 pt-8 border-t border-gray-200 no-print">
+                        <div class="flex flex-col md:flex-row justify-between items-center gap-6 pb-8">
+                            <div class="text-center md:text-right">
+                                <h4 class="font-bold text-emerald-700 mb-2">نظام إدارة الغيابات المدرسية</h4>
+                                <p class="text-xs text-gray-500 max-w-xs">أداة احترافية لمساعدة الإدارة التربوية في تتبع غيابات التلاميذ وتحليلها بسهولة.</p>
+                            </div>
+                            <div class="flex flex-col items-center md:items-start gap-4">
+                                <div class="flex flex-wrap justify-center gap-6 text-sm font-semibold text-gray-600">
+                                    <button onclick="openModal('about-modal')" class="hover:text-emerald-600 transition-colors">من نحن</button>
+                                    <button onclick="openModal('privacy-modal')" class="hover:text-emerald-600 transition-colors">سياسة الخصوصية</button>
+                                    <button onclick="openModal('terms-modal')" class="hover:text-emerald-600 transition-colors">اتفاقية الاستخدام</button>
+                                </div>
+                                <div class="flex gap-4 text-gray-400">
+                                    <a href="#" class="hover:text-emerald-600 transition-colors text-lg" aria-label="فيسبوك"><i class="fa-brands fa-facebook"></i></a>
+                                    <a href="#" class="hover:text-emerald-600 transition-colors text-lg" aria-label="تويتر"><i class="fa-brands fa-x-twitter"></i></a>
+                                    <a href="#" class="hover:text-emerald-600 transition-colors text-lg" aria-label="يوتيوب"><i class="fa-brands fa-youtube"></i></a>
+                                    <a href="#" class="hover:text-emerald-600 transition-colors text-lg" aria-label="إنستغرام"><i class="fa-brands fa-instagram"></i></a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-center py-6 border-t border-gray-100 text-[10px] text-gray-400 font-bold tracking-widest uppercase">
+                            &copy; 2026 جميع الحقوق محفوظة
+                        </div>
+                    </footer>
                 </div>
             </div>
         </section>
     </main>
     <div id="print-area" style="display:none"></div>
     <div id="sheet-print-area" style="display:none"></div>
+
+    <!-- About Us Modal -->
+    <div id="about-modal" class="sheet-modal">
+        <div class="sheet-modal-inner max-w-2xl">
+            <div class="sheet-modal-header bg-emerald-50">
+                <i class="fa-solid fa-circle-info text-emerald-600"></i>
+                <h3 class="font-bold text-emerald-800">من نحن</h3>
+                <button onclick="closeModal('about-modal')" class="mr-auto text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="sheet-modal-body p-8 text-right leading-relaxed text-gray-700">
+                <h4 class="text-xl font-bold text-emerald-700 mb-4">مرحباً بكم في نظام إدارة الغيابات المدرسية</h4>
+                <p class="mb-4">نحن فريق من المطورين والمهتمين بالشأن التربوي، نسعى لتوفير أدوات رقمية بسيطة وفعالة تساعد الأطر التربوية في مهامهم اليومية.</p>
+                <p class="mb-4">هذا الموقع تم تطويره ليكون أداة مساعدة للأستاذ(ة) في تدبير غيابات التلاميذ، من خلال تحويل ملفات "مسار" إلى تقارير ورسوم بيانية سهلة القراءة، بالإضافة إلى تسهيل التواصل مع أولياء الأمور.</p>
+                <p>هدفنا هو رقمنة العمليات الإدارية البسيطة لربح الوقت والجهد والتركيز على العملية التعليمية التعلمية.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Privacy Policy Modal -->
+    <div id="privacy-modal" class="sheet-modal">
+        <div class="sheet-modal-inner max-w-2xl">
+            <div class="sheet-modal-header bg-emerald-50">
+                <i class="fa-solid fa-shield-halved text-emerald-600"></i>
+                <h3 class="font-bold text-emerald-800">سياسة الخصوصية</h3>
+                <button onclick="closeModal('privacy-modal')" class="mr-auto text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="sheet-modal-body p-8 text-right leading-relaxed text-gray-700">
+                <h4 class="text-lg font-bold text-emerald-700 mb-4">1. حماية البيانات</h4>
+                <p class="mb-4 text-sm">نحن نولي أهمية قصوى لخصوصية بياناتكم. جميع الملفات التي يتم رفعها على الموقع تتم معالجتها محلياً في متصفحكم ولا يتم تخزين محتواها (أسماء التلاميذ، أرقام مسار) في خوادمنا إلا إذا اخترتم تسجيل الدخول واستخدام خاصية المزامنة السحابية.</p>
+                
+                <h4 class="text-lg font-bold text-emerald-700 mb-4">2. ملفات تعريف الارتباط (Cookies)</h4>
+                <p class="mb-4 text-sm">نستخدم ملفات تعريف الارتباط لتحسين تجربة المستخدم، ولأغراض إعلانية عبر Google AdSense. تساعدنا هذه الملفات في عرض إعلانات مخصصة بناءً على زياراتكم السابقة لموقعنا أو لمواقع أخرى.</p>
+                
+                <h4 class="text-lg font-bold text-emerald-700 mb-4">3. إعلانات Google AdSense</h4>
+                <p class="mb-4 text-sm">يستخدم الموقع طرفاً ثالثاً (Google) لعرض الإعلانات. تستخدم Google ملفات تعريف الارتباط لعرض إعلانات للمستخدمين استناداً إلى زياراتهم لموقعنا. يمكن للمستخدمين اختيار تعطيل استخدام ملف تعريف الارتباط DART بزيارة سياسة الخصوصية الخاصة بإعلانات Google وشبكة المحتوى.</p>
+                
+                <h4 class="text-lg font-bold text-emerald-700 mb-4">4. التغييرات في سياسة الخصوصية</h4>
+                <p class="text-sm">قد نقوم بتحديث سياسة الخصوصية من وقت لآخر. ننصحكم بمراجعة هذه الصفحة بشكل دوري.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Terms of Use Modal -->
+    <div id="terms-modal" class="sheet-modal">
+        <div class="sheet-modal-inner max-w-2xl">
+            <div class="sheet-modal-header bg-emerald-50">
+                <i class="fa-solid fa-file-contract text-emerald-600"></i>
+                <h3 class="font-bold text-emerald-800">اتفاقية الاستخدام</h3>
+                <button onclick="closeModal('terms-modal')" class="mr-auto text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="sheet-modal-body p-8 text-right leading-relaxed text-gray-700">
+                <h4 class="text-lg font-bold text-emerald-700 mb-4">1. قبول الشروط</h4>
+                <p class="mb-4 text-sm">باستخدامكم لهذا الموقع، فإنكم توافقون على الالتزام بشروط الاستخدام المذكورة هنا. إذا كنت لا توافق على أي جزء من هذه الشروط، فيرجى عدم استخدام الموقع.</p>
+                
+                <h4 class="text-lg font-bold text-emerald-700 mb-4">2. الاستخدام المسموح به</h4>
+                <p class="mb-4 text-sm">يُسمح باستخدام هذا الموقع للأغراض التعليمية والمهنية فقط. يُمنع استخدام الموقع في أي نشاط غير قانوني أو يهدف إلى الإضرار بالآخرين أو بخصوصيتهم.</p>
+                
+                <h4 class="text-lg font-bold text-emerald-700 mb-4">3. إخلاء المسؤولية</h4>
+                <p class="mb-4 text-sm">يتم توفير الموقع "كما هو" دون أي ضمانات من أي نوع. نحن غير مسؤولين عن أي فقدان للبيانات أو أخطاء ناتجة عن استخدام الموقع أو عدم دقته في استخراج البيانات من ملفات Excel.</p>
+                
+                <h4 class="text-lg font-bold text-emerald-700 mb-4">4. حقوق الملكية</h4>
+                <p class="text-sm">جميع الحقوق محفوظة للموقع فيما يخص التصميم والبرمجة. يُمنع نسخ أو إعادة توزيع محتوى الموقع دون إذن مسبق.</p>
+            </div>
+        </div>
+    </div>
 
     <script type="module" src="/src/main.tsx"></script>
 </body>

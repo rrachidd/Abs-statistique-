@@ -2822,7 +2822,18 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') { (window as any).closeDetailPanel(); (window as any).closeSheetModal(); } });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { (window as any).closeDetailPanel(); (window as any).closeSheetModal(); (window as any).closeModal('about-modal'); (window as any).closeModal('privacy-modal'); (window as any).closeModal('terms-modal'); } });
+    
+    (window as any).openModal = (id: string) => {
+        const m = document.getElementById(id);
+        if (m) m.classList.add('open');
+    };
+    
+    (window as any).closeModal = (id: string) => {
+        const m = document.getElementById(id);
+        if (m) m.classList.remove('open');
+    };
+
     window.addEventListener('afterprint', () => { 
         const pa = document.getElementById('print-area'); if(pa) pa.style.display = 'none'; 
         const spa = document.getElementById('sheet-print-area'); if(spa) spa.style.display = 'none'; 
