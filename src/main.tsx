@@ -2792,13 +2792,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial ad check for visible slots (like Top Banner)
     setTimeout(initAds, 1000);
     const uploadZone=document.getElementById('upload-zone');
+    const jsonUploadZone=document.getElementById('json-upload-zone');
     const fileInput=document.getElementById('file-input') as HTMLInputElement;
+    const jsonFileInput=document.getElementById('json-file-input') as HTMLInputElement;
     const guardianFileInput=document.getElementById('guardian-file-input') as HTMLInputElement;
+    
     if(uploadZone && fileInput) {
         ['dragenter','dragover'].forEach(e=>uploadZone.addEventListener(e,ev=>{ev.preventDefault();uploadZone.classList.add('drag-over')}));
         ['dragleave','drop'].forEach(e=>uploadZone.addEventListener(e,ev=>{ev.preventDefault();uploadZone.classList.remove('drag-over')}));
         uploadZone.addEventListener('drop',e=>handleFiles(e.dataTransfer!.files));
         fileInput.addEventListener('change',e=>{handleFiles((e.target as HTMLInputElement).files!); (e.target as HTMLInputElement).value=''});
+    }
+
+    if(jsonUploadZone && jsonFileInput) {
+        ['dragenter','dragover'].forEach(e=>jsonUploadZone.addEventListener(e,ev=>{ev.preventDefault();jsonUploadZone.classList.add('drag-over')}));
+        ['dragleave','drop'].forEach(e=>jsonUploadZone.addEventListener(e,ev=>{ev.preventDefault();jsonUploadZone.classList.remove('drag-over')}));
+        jsonUploadZone.addEventListener('drop',e=>handleJsonFiles(e.dataTransfer!.files));
+        jsonFileInput.addEventListener('change',e=>{handleJsonFiles((e.target as HTMLInputElement).files!); (e.target as HTMLInputElement).value=''});
     }
     if (guardianFileInput) {
         guardianFileInput.addEventListener('change', e => {
@@ -2808,6 +2818,34 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleFiles(files: FileList){Array.from(files).forEach(file=>{if(!file.name.match(/\.(xlsx|xls)$/i)){showToast(`"${file.name}" ليس Excel`,'error');return}if(file.size>MAX_FILE_SIZE){showToast(`"${file.name}" كبير جداً`,'error');return}const r=new FileReader();r.onload=e=>processExcel(e.target!.result,file.name);r.onerror=()=>showToast(`خطأ في القراءة`,'error');r.readAsArrayBuffer(file)})}
+
+    function handleJsonFiles(files: FileList) {
+        Array.from(files).forEach(file => {
+            if (!file.name.match(/\.json$/i)) {
+                showToast(`"${file.name}" ليس ملف JSON`, 'error');
+                return;
+            }
+            const r = new FileReader();
+            r.onload = (e: any) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data.datasets) state.datasets = data.datasets;
+                    if (data.guardians) state.guardians = data.guardians;
+                    if (data.guardianDetails) state.guardianDetails = data.guardianDetails;
+                    if (data.latenessRecords) state.latenessRecords = data.latenessRecords;
+                    
+                    saveDataLocally();
+                    renderAll();
+                    showToast('تم استيراد النسخة الاحتياطية بنجاح', 'success');
+                } catch (err) {
+                    console.error("JSON Import error", err);
+                    showToast('خطأ في قراءة ملف النسخة الاحتياطية', 'error');
+                }
+            };
+            r.onerror = () => showToast(`خطأ في قراءة الملف`, 'error');
+            r.readAsText(file);
+        });
+    }
 
     function handleGuardianFiles(files: FileList) {
         Array.from(files).forEach(file => {
